@@ -1,12 +1,54 @@
 import tensorflow as tf
 from tensorflow.keras.applications import MobileNet
 from tensorflow.keras.models import Model
-
+import matplotlib.pyplot as plt
 import sys
+
+class PoseEstimationLoss(tf.keras.losses.Loss):
+    def __init__(self, lambda_pose, lambda_quat, lambda_norm, name='pose_estimation_loss'):
+        super(PoseEstimationLoss, self).__init__(name=name)
+        self.lambda_pose = lambda_pose
+        self.lambda_quat = lambda_quat
+        self.lambda_norm = lambda_norm
+        self.mse = tf.keras.losses.MeanSquaredError()
+
+    def call(self, y_true, y_pred):
+        # Split the predictions and targets into pose and quaternion parameters
+        # Extract first 3 values for the pose
+        pred_pose = y_pred[:, :3]  # First 3 values for pose
+        # Extract last 4 values for the quaternion
+        pred_quat = y_pred[:, 3:]  # Last 4 values for quaternion
+        
+        # Extract first 3 values for the pose in the target
+        target_pose = y_true[:, :3]
+        # Extract last 4 values for the quaternion in the target
+        target_quat = y_true[:, 3:]
+        
+        # Normalize the predicted quaternion
+        pred_quat_norm = pred_quat / tf.norm(pred_quat, axis=1, keepdims=True)
+        
+        # Pose estimation loss (Mean Squared Error)
+        pose_loss = self.mse(target_pose, pred_pose)
+        
+        # Quaternion regression loss (Mean Squared Error between normalized quaternions)
+        quat_loss = self.mse(target_quat, pred_quat_norm)
+        
+        # Quaternion normalization loss
+        quat_norm_loss = tf.reduce_mean((tf.norm(pred_quat, axis=1) - 1) ** 2)
+        
+        # Total loss with individual weights
+        total_loss = (
+            self.lambda_pose * pose_loss +
+            self.lambda_quat * quat_loss +
+            self.lambda_norm * quat_norm_loss
+        )
+        
+        return total_loss
+
 
 ### DEFINE MODEL
 
-base_model = MobileNet(include_top=False, input_shape=(240, 240, 2), weights=None)
+base_model = MobileNet(include_top=False, alpha=0.7, input_shape=(240, 240, 3), weights=None)
 # base_model.trainable = False  # Freeze all layers in the base model
 
 x = base_model.output
@@ -21,60 +63,35 @@ print(model_keras.summary())
 ### TRAIN MODEL
 
 #TODO: load data
+position_dir = './event_frames'
+# position_file = 'position.csv'
+# # Load position data from CSV
+y_train = tf.convert_to_tensor(list(range(7)), dtype=tf.float32)
+y_train = tf.expand_dims(y_train, axis=1)
+y_train = tf.tile(y_train, [1, 200])
+y_train = tf.transpose(y_train, perm=[1, 0])
+print(y_train.shape)
+# with open(os.path.abspath(os.path.join(position_dir, position_file))) as file:
+#     reader = csv.reader(file)
+#     for row in reader:
+#         y_test.append(row)
+        
+# Load images
+x_train = []
+for _ in range(20):
+    for i in range(10):
+        img = plt.imread(f'{position_dir}/frame_{i:02}.png',)
+        x_train.append(img)
+    
+    
+x_train = tf.convert_to_tensor(x_train, dtype=tf.float32)
 
 
 model_keras.compile(
-    loss= None, #TODO: add our loss
+    loss=PoseEstimationLoss(0.5,0.3,0.2),
     optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3),
     metrics=['accuracy'])
 
 _ = model_keras.fit(x_train, y_train, epochs=10, validation_split=0.1)
 
-
-### QUANTIZE
-
-from quantizeml.models import quantize, QuantizationParams
-
-qparams = QuantizationParams(input_weight_bits=8, weight_bits=4, activation_bits=4)
-# TODO: call quantize with the real training data
-# https://doc.brainchipinc.com/examples/general/plot_0_global_workflow.html#sphx-glr-examples-general-plot-0-global-workflow-py
-# model_quantized = quantize(model_keras, qparams=qparams,
-                        #    samples=x_train, num_samples=1024, batch_size=100, epochs=2)
-model_quantized = quantize(model_keras, qparams=qparams)
-model_quantized.summary()
-
-# TODO: evaluate model
-def compile_evaluate(model):
-    """ Compiles and evaluates the model, then return accuracy score. """
-    model.compile(metrics=['accuracy'])
-    return model.evaluate(x_test, y_test, verbose=0)[1]
-
-
-print('Test accuracy after 8-bit quantization:', compile_evaluate(model_quantized))
-
-model_quantized.compile(
-    loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True),
-    optimizer=tf.keras.optimizers.Adam(learning_rate=1e-4),
-    metrics=['accuracy'])
-
-# score = model_quantized.evaluate(x_test, y_test, verbose=0)[1]
-# print('Test accuracy after fine tuning:', score)
-
-# model_quantized.fit(x_train, y_train, epochs=5, validation_split=0.1)
-
-
-
-### CONVERT TO AIKIDA NETWORK
-
-from cnn2snn import convert
-
-model_akida = convert(model_quantized)
-model_akida.summary()
-
-
-# # check performance
-# accuracy = model_akida.evaluate(x_test, y_test)
-# print('Test accuracy after conversion:', accuracy)
-
-# # For non-regression purposes
-# assert accuracy > 0.96
+model_keras.save("./latest_model.keras")
