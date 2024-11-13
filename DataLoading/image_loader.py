@@ -34,7 +34,7 @@ class ImageDataLoader:
             if os.path.isdir(subdir_path):
                 # Read the CSV file without a header
                 #FIXME: proper CSV file name from directory name
-                label_csv_path = os.path.join(subdir_path, 'labels.csv')
+                label_csv_path = os.path.join(subdir_path, self._get_csv_filename(subdir))
                 label_df = pd.read_csv(label_csv_path, header=None)
                 
                 # Go through each row in the CSV
@@ -60,6 +60,10 @@ class ImageDataLoader:
         # Map the function to load images and labels
         dataset = dataset.map(self.load_image_and_label, num_parallel_calls=tf.data.AUTOTUNE)
         return dataset
+    
+    def _get_csv_filename(dirname: str) -> str:
+        return dirname + '.csv'
+        
 
 # Load the dataset
 root_directory = "path_to_your_root_directory"
