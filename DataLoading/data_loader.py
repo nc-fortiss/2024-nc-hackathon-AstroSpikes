@@ -196,4 +196,20 @@ class SamplesDataLoader(tonic.Dataset):
             rgb_frame[:,:,2] = sample_events[frame+2]*255
             ret.append(rgb_frame)
         return ret
-        
+    
+
+if __name__ == "__main__":
+        root_dir= "sftp://10.200.2.140/home/lecomte/AstroSpikes/SPADES"
+        output_dir= os.path.join(root_dir, "train_dataset")
+        os.makedirs(output_dir)
+        transform_queue = transforms.Compose([
+                    transforms.MergePolarities(),
+                    transforms.CenterCrop(sensor_size=(1280,720,1), size = (720,720)),
+                    transforms.Downsample(spatial_factor=256/720),
+                    transforms.ToTimesurface(dt=333,tau=200,sensor_size=(256,256,1))
+                ])
+        dataset = SamplesDataLoader(root_dir=root_dir, dataset_type="synthetic", transform=transform_queue)
+        for idx in range(len(dataset)):
+            dataset.save_sample(idx, output_dir)
+            print(f"Sample {idx} saved successfully.")
+        print ("DONE")
