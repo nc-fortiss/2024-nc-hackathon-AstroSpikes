@@ -3,7 +3,7 @@ import tensorflow as tf
 import pandas as pd
 
 class ImageDataLoader:
-    def __init__(self, root, batch_size=32, shuffle_count=1024):
+    def __init__(self, root, batch_size=128, shuffle_count=1024):
         self.root = root
         self.batch_size = batch_size
         self.shuffle_count = shuffle_count
@@ -66,9 +66,9 @@ class ImageDataLoader:
         
 
 # Load the dataset
-root_directory = "/home/brini/hackathon/image_dataset"
+#root_directory = "/home/brini/hackathon/image_dataset"
 
-dataset = ImageDataLoader(root_directory, batch_size=32)()
+#dataset = ImageDataLoader(root_directory, batch_size=32)()
 
 #for batch in dataset.take(1):
   #  images, labels = batch

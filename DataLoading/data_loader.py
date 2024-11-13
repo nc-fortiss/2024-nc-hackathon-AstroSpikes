@@ -127,7 +127,6 @@ class SamplesDataLoader(tonic.Dataset):
         band_edges = np.array([boundry[0] for boundry in boundries])
         band_active = np.array([boundry[1] for boundry in boundries])
 
-        print(events[0].shape)
 
         sample_events_x = np.array([smpl[1] for smpl in events])
         # only three bins
@@ -136,7 +135,6 @@ class SamplesDataLoader(tonic.Dataset):
 
         fraction_active = np.sum(counts[band_active]) / np.sum(counts)
 
-        print("Result", fraction_active)
         
         return fraction_active
 
@@ -161,7 +159,6 @@ class SamplesDataLoader(tonic.Dataset):
         events, labels = self.__getitem__(idx)
 
         if events is None:
-            print(f"Event with index {idx} rejected while filtering.")
             return
 
         file_path = file_path + '/' + traj_name + '/'
@@ -172,7 +169,6 @@ class SamplesDataLoader(tonic.Dataset):
         for i, frame in enumerate(rgb_frames):
             im = Image.fromarray(frame)
             number = f"{i:03}"
-            print(number)
             im.save(f"{file_path}img{number}_{traj_name[4:]}.png")
             im.save(f"{file_path}img{number}_{traj_name[4:]}.png")
         
@@ -188,7 +184,7 @@ class SamplesDataLoader(tonic.Dataset):
         ret = []
         for frame in range(0, (len(sample_events)//3)*3, 3):
             #empty frame
-            rgb_frame = np.zeros((256,256,3), dtype=np.uint8)
+            rgb_frame = np.zeros((240,240,3), dtype=np.uint8)
             #stack 3 frames into 3 channels
             #scale [0,1] to [0,255]
             rgb_frame[:,:,0] = sample_events[frame]*255
@@ -200,13 +196,13 @@ class SamplesDataLoader(tonic.Dataset):
 
 if __name__ == "__main__":
         root_dir= "/home/lecomte/AstroSpikes/SPADES"
-        output_dir= "./train_dataset" #os.path.join(root_dir, "train_dataset")
+        output_dir= "./generating_dataset" #os.path.join(root_dir, "train_dataset")
         os.makedirs(output_dir, exist_ok=True)
         transform_queue = transforms.Compose([
                     transforms.MergePolarities(),
                     transforms.CenterCrop(sensor_size=(1280,720,1), size = (720,720)),
-                    transforms.Downsample(spatial_factor=256/720),
-                    transforms.ToTimesurface(dt=333,tau=200,sensor_size=(256,256,1))
+                    transforms.Downsample(spatial_factor=240/720),
+                    transforms.ToTimesurface(dt=333,tau=200,sensor_size=(240,240,1))
                 ])
         dataset = SamplesDataLoader(root_dir=root_dir, dataset_type="synthetic", transform=transform_queue)
         for idx in range(len(dataset.samples)):

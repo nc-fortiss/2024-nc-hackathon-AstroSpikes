@@ -2,8 +2,13 @@ import tensorflow as tf
 from tensorflow.keras.applications import MobileNet
 from tensorflow.keras.models import Model
 import matplotlib.pyplot as plt
+from DataLoading import image_loader
 import sys
 import json
+import logging
+
+
+logging.basicConfig(stream=sys.stderr, level=logging.INFO)
 
 class PoseEstimationLoss(tf.keras.losses.Loss):
     def __init__(self, lambda_pose, lambda_quat, lambda_norm, name='pose_estimation_loss'):
@@ -59,43 +64,32 @@ x = tf.keras.layers.Flatten()(x)
 output_l = tf.keras.layers.Dense(7, activation='linear')(x)
 model_keras = Model(inputs=base_model.input, outputs=output_l)
 
-print(model_keras.summary())
+logging.info(model_keras.summary())
 
 ### TRAIN MODEL
 
 #TODO: load data
-position_dir = './event_frames'
+position_dir = './train_dataset'
 # position_file = 'position.csv'
 # # Load position data from CSV
-y_train = tf.convert_to_tensor(list(range(7)), dtype=tf.float32)
-y_train = tf.expand_dims(y_train, axis=1)
-y_train = tf.tile(y_train, [1, 200])
-y_train = tf.transpose(y_train, perm=[1, 0])
-print(y_train.shape)
+dataset = image_loader.ImageDataLoader(position_dir)()
 # with open(os.path.abspath(os.path.join(position_dir, position_file))) as file:
 #     reader = csv.reader(file)
 #     for row in reader:
 #         y_test.append(row)
-        
-# Load images
-x_train = []
-for _ in range(20):
-    for i in range(10):
-        img = plt.imread(f'{position_dir}/frame_{i:02}.png',)
-        x_train.append(img)
-    
-    
-x_train = tf.convert_to_tensor(x_train, dtype=tf.float32)
-
 
 model_keras.compile(
-    loss=PoseEstimationLoss(0.5,0.3,0.2),
+    loss=PoseEstimationLoss(0.6,0.3,0.1),
     optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3),
     metrics=['accuracy'])
 
-history = model_keras.fit(x_train, y_train, epochs=10, validation_split=0.1, verbose=2)
+history = model_keras.fit(dataset, epochs=50, verbose=2)
 
-with open("history_model.json") as f:
-    json.dump(f, history)
+model_keras.save("./latest_model_3231.keras")
+def set_default(obj):
+    if isinstance(obj, set):
+        return list(obj)
+    raise TypeError
 
-model_keras.save("./latest_model.keras")
+json.dump(history, open("history_model.json", 'w'), default=set_default)
+logging.info("Training over")
