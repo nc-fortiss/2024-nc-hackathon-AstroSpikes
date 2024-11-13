@@ -7,7 +7,7 @@ import numpy as np
 root_dir = "/Users/jost/Downloads/SPADES"
 
 class SamplesDataLoader(tonic.Dataset):
-    def __init__(self, root_dir, dataset_type="synthetic", transform=None):
+    def __init__(self, root_dir, dataset_type="synthetic", transform=None, threshold=0.8):
         """
         Args:
             root_dir (str): Root directory containing the synthetic or Real dataset folders.
@@ -18,6 +18,9 @@ class SamplesDataLoader(tonic.Dataset):
         self.dataset_type = dataset_type
         self.samples = self._load_samples()
         self.transform = transform
+        self.threshold = threshold
+        self.boundries = [(280, False), (1000, True), (1280, False)]
+
 
     def _load_samples(self):
         """
@@ -59,6 +62,10 @@ class SamplesDataLoader(tonic.Dataset):
             labels = self._load_labels(label_file)
         else:
             labels = None
+        
+        if self._get_distribution(events) < self.threshold:
+            return None
+        
         sample = events, labels
         return sample
 
@@ -105,3 +112,21 @@ class SamplesDataLoader(tonic.Dataset):
         """
         labels = pd.read_csv(file_path)
         return labels.to_records(index=False)
+
+
+    def _get_distribution(self, events, boundries: list[tuple[int, bool]]=None) -> bool:
+        """Filters out the traces where events are outside the center of the image
+        boundries: for eg. [(280, False), (360, True)] means that the x values should be between 280 and 360"""
+        if boundries is None:
+            boundries = self.boundries
+            
+        band_edges = np.array([boundry[0] for boundry in boundries])
+        band_active = np.array([boundry[1] for boundry in boundries])
+
+        sample_events_x = np.array([smpl[1] for smpl in events])
+        # only three bins
+        event_distribution = np.digitize(sample_events_x, band_edges, right=True)
+        
+        fraction_active = np.sum(event_distribution[band_active]) / np.sum(event_distribution)
+        
+        return fraction_active
