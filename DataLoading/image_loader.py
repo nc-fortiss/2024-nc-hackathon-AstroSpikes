@@ -70,6 +70,12 @@ root_directory = "/home/brini/hackathon/image_dataset"
 
 dataset = ImageDataLoader(root_directory, batch_size=32)()
 
+#for batch in dataset.take(1):
+  #  images, labels = batch
+   # print(images.shape)
+  #  print(labels.shape)
+   # print()
+
 
 # # EXAMPLE
 # # Define your model
