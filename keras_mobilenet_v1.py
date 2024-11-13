@@ -3,6 +3,7 @@ from tensorflow.keras.applications import MobileNet
 from tensorflow.keras.models import Model
 import matplotlib.pyplot as plt
 import sys
+import json
 
 class PoseEstimationLoss(tf.keras.losses.Loss):
     def __init__(self, lambda_pose, lambda_quat, lambda_norm, name='pose_estimation_loss'):
@@ -92,6 +93,9 @@ model_keras.compile(
     optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3),
     metrics=['accuracy'])
 
-_ = model_keras.fit(x_train, y_train, epochs=10, validation_split=0.1)
+history = model_keras.fit(x_train, y_train, epochs=10, validation_split=0.1, verbose=2)
+
+with open("history_model.json") as f:
+    json.dump(f, history)
 
 model_keras.save("./latest_model.keras")
