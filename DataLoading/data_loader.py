@@ -133,7 +133,9 @@ class SamplesDataLoader(tonic.Dataset):
         rgb_frames = self.generate_rgb_from_samples(events)
         for i, frame in enumerate(rgb_frames):
             im = Image.fromarray(frame)
-            im.save(f"{file_path}{traj_name}_{i}.png")
+            number = f"{i:03}"
+            print(number)
+            im.save(f"{file_path}img{number}_{traj_name[4:]}.png")
         
         # copy csv file to folder
         csv_file_path = root_dir + '/synthetic/labels/' + traj_name + '.csv'
