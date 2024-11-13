@@ -35,7 +35,7 @@ class ImageDataLoader:
                 # Read the CSV file without a header
                 #FIXME: proper CSV file name from directory name
                 label_csv_path = os.path.join(subdir_path, self._get_csv_filename(subdir))
-                label_df = pd.read_csv(label_csv_path, header=None)
+                label_df = pd.read_csv(label_csv_path, header=None, skiprows=1)
                 
                 # Go through each row in the CSV
                 for index, row in label_df.iterrows():
@@ -61,14 +61,14 @@ class ImageDataLoader:
         dataset = dataset.map(self.load_image_and_label, num_parallel_calls=tf.data.AUTOTUNE)
         return dataset
     
-    def _get_csv_filename(dirname: str) -> str:
+    def _get_csv_filename(self,dirname: str) -> str:
         return dirname + '.csv'
         
 
 # Load the dataset
-root_directory = "path_to_your_root_directory"
+root_directory = "/home/brini/hackathon/image_dataset"
 
-dataset = ImageDataLoader(root_directory)()
+dataset = ImageDataLoader(root_directory, batch_size=32)()
 
 
 # # EXAMPLE
