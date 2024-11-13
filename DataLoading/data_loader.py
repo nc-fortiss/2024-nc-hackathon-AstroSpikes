@@ -3,6 +3,8 @@ import tonic.transforms as transforms
 import pandas as pd
 import os
 import numpy as np
+from PIL import Image
+import shutil
 
 root_dir = "/Users/jost/Downloads/SPADES"
 
@@ -105,3 +107,52 @@ class SamplesDataLoader(tonic.Dataset):
         """
         labels = pd.read_csv(file_path)
         return labels.to_records(index=False)
+
+    def save_sample(self, idx, file_path):
+        """
+        Save a sample from the dataset at the given index to a file.
+        
+        Args:
+            idx (int): Index of the sample to save.
+            file_path (str): Path to the file where the sample should be saved.
+        """
+        #get the trajectory name from the index
+        traj_name = self.samples[idx][0].split('/')[-1].split('.')[0]
+
+        #create a folder if it does not exist
+        #join the file path with the trajectory name
+        file_path = file_path + '/' + traj_name + '/'
+        if not os.path.exists(file_path):
+            os.makedirs(file_path)
+
+        events, labels = self.__getitem__(idx)
+
+        if events is None:
+            print("Event with index f{idx} rejected while filtering.")
+            return
+        rgb_frames = self.generate_rgb_from_samples(events)
+        for i, frame in enumerate(rgb_frames):
+            im = Image.fromarray(frame)
+            im.save(f"{file_path}{traj_name}_{i}.png")
+        
+        # copy csv file to folder
+        csv_file_path = root_dir + '/synthetic/labels/' + traj_name + '.csv'
+        csv_dest_path = file_path + traj_name + '.csv'
+        shutil.copy(csv_file_path, csv_dest_path)
+
+
+
+
+    def generate_rgb_from_samples(self, sample_events):
+        ret = []
+        for frame in range(0, (len(sample_events)//3)*3, 3):
+            #empty frame
+            rgb_frame = np.zeros((256,256,3), dtype=np.uint8)
+            #stack 3 frames into 3 channels
+            #scale [0,1] to [0,255]
+            rgb_frame[:,:,0] = sample_events[frame]*255
+            rgb_frame[:,:,1] = sample_events[frame+1]*255
+            rgb_frame[:,:,2] = sample_events[frame+2]*255
+            ret.append(rgb_frame)
+        return ret
+        
