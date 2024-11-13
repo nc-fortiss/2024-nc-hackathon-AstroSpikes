@@ -9,7 +9,7 @@ import shutil
 root_dir = "/Users/jost/Downloads/SPADES"
 
 class SamplesDataLoader(tonic.Dataset):
-    def __init__(self, root_dir, dataset_type="synthetic", transform=None):
+    def __init__(self, root_dir, dataset_type="synthetic", transform=None, threshold=0.8):
         """
         Args:
             root_dir (str): Root directory containing the synthetic or Real dataset folders.
@@ -20,6 +20,9 @@ class SamplesDataLoader(tonic.Dataset):
         self.dataset_type = dataset_type
         self.samples = self._load_samples()
         self.transform = transform
+        self.threshold = threshold
+        self.boundries = [(280, False), (1000, True), (1280, False)]
+
 
     def _load_samples(self):
         """
@@ -61,6 +64,12 @@ class SamplesDataLoader(tonic.Dataset):
             labels = self._load_labels(label_file)
         else:
             labels = None
+        
+        if self._get_distribution(events) < self.threshold:
+            return (None, None)
+        
+        events = self.transform(events)
+
         sample = events, labels
         return sample
 
@@ -94,7 +103,7 @@ class SamplesDataLoader(tonic.Dataset):
         assert 'y' in events.dtype.names
         assert 'p' in events.dtype.names
 
-        events = self.transform(events)
+        # events = self.transform(events)
 
         return events
 
@@ -107,6 +116,30 @@ class SamplesDataLoader(tonic.Dataset):
         """
         labels = pd.read_csv(file_path)
         return labels.to_records(index=False)
+
+
+    def _get_distribution(self, events, boundries: list[tuple[int, bool]]=None) -> bool:
+        """Filters out the traces where events are outside the center of the image
+        boundries: for eg. [(280, False), (360, True)] means that the x values should be between 280 and 360"""
+        if boundries is None:
+            boundries = self.boundries
+            
+        band_edges = np.array([boundry[0] for boundry in boundries])
+        band_active = np.array([boundry[1] for boundry in boundries])
+
+        print(events[0].shape)
+
+        sample_events_x = np.array([smpl[1] for smpl in events])
+        # only three bins
+        events_x_digitize = np.digitize(sample_events_x, band_edges, right=True)
+        values, counts = np.unique(events_x_digitize, return_counts=True)
+
+        fraction_active = np.sum(counts[band_active]) / np.sum(counts)
+
+        print("Result", fraction_active)
+        
+        return fraction_active
+
 
     def save_sample(self, idx, file_path):
         """
@@ -121,20 +154,26 @@ class SamplesDataLoader(tonic.Dataset):
 
         #create a folder if it does not exist
         #join the file path with the trajectory name
-        file_path = file_path + '/' + traj_name + '/'
-        if not os.path.exists(file_path):
-            os.makedirs(file_path)
+        # file_path = file_path + '/' + traj_name + '/'
+        # if not os.path.exists(file_path):
+        #     os.makedirs(file_path)
 
         events, labels = self.__getitem__(idx)
 
         if events is None:
-            print("Event with index f{idx} rejected while filtering.")
+            print(f"Event with index {idx} rejected while filtering.")
             return
+
+        file_path = file_path + '/' + traj_name + '/'
+        if not os.path.exists(file_path):
+            os.makedirs(file_path)
+
         rgb_frames = self.generate_rgb_from_samples(events)
         for i, frame in enumerate(rgb_frames):
             im = Image.fromarray(frame)
             number = f"{i:03}"
             print(number)
+            im.save(f"{file_path}img{number}_{traj_name[4:]}.png")
             im.save(f"{file_path}img{number}_{traj_name[4:]}.png")
         
         # copy csv file to folder
