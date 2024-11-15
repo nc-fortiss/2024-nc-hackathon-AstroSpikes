@@ -7,9 +7,9 @@ import json
 from DataLoading import image_loader
 
 
-PRETRAINED_MODEL = True
-POSITION_DIR = './generating_dataset'
-EPOCHS = 50
+PRETRAINED_MODEL = False
+POSITION_DIR = './frames'
+EPOCHS = 1000
 BATCH_SIZE = 128
 
 
@@ -54,14 +54,16 @@ class PoseEstimationLoss(tf.keras.losses.Loss):
         
         return total_loss
 
+model_name = "./TR002_model_500epochs_orientation_pose" + str(EPOCHS) + ".keras"
+logging.info("Training the model : " + model_name)
 with set_akida_version(AkidaVersion.v1):
     if PRETRAINED_MODEL:
         base_model = mobilenet.mobilenet_imagenet_pretrained(alpha=1.0, quantized=False)
         dataset = image_loader.ImageDataLoader(POSITION_DIR, transform=image_loader.ImageDataLoader.center_crop_224x224)()
         
     else:
-        base_model = mobilenet.mobilenet_imagenet(input_shape=(240, 240, 3), alpha=1.0, include_top=False, input_scaling=None)
-        dataset = image_loader.ImageDataLoader(POSITION_DIR, transform=None)()
+        base_model = mobilenet.mobilenet_imagenet(input_shape=(224, 224, 3), alpha=1.0, include_top=False, input_scaling=None)
+        dataset = image_loader.ImageDataLoader(POSITION_DIR, transform=image_loader.ImageDataLoader.center_crop_224x224)()
 
     base_model.summary()
 
@@ -82,7 +84,7 @@ with set_akida_version(AkidaVersion.v1):
     model_keras.add(tf.keras.layers.Dense(7, activation='linear'))
     
     ### DEFINE MODEL
-    model_keras.compile(loss=PoseEstimationLoss(1.0 ,0., 0.),
+    model_keras.compile(loss=PoseEstimationLoss(0.6 ,0.3, 0.1),
                         optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3),
                         metrics=['accuracy'])
     
@@ -93,7 +95,7 @@ logging.info(model_keras.summary())
 ### TRAIN MODEL
 history = model_keras.fit(dataset, epochs=EPOCHS, batch_size=BATCH_SIZE, verbose=2, shuffle=True)    
 
-model_keras.save("./pretrained_model_unfreezed.keras")
+model_keras.save(model_name)
 def set_default(obj):
     if isinstance(obj, set):
         return list(obj)

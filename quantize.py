@@ -9,11 +9,11 @@ import logging
 from cnn2snn import set_akida_version, AkidaVersion
 
 FORCE_FULL_QUANTIZATION = False
-POSITION_DIR = './generating_dataset'
-
+POSITION_DIR = './frames'
+model_name = "pretrained_model_unfreezed.keras"
 
 tf.keras.utils.get_custom_objects().update({"PoseEstimationLoss": PoseEstimationLoss})
-loaded_model = tf.keras.models.load_model("pretrained_model_unfreezed.keras")
+loaded_model = tf.keras.models.load_model(model_name)
 print("Model loaded successfully!")
 loaded_model.summary()
 if FORCE_FULL_QUANTIZATION:
@@ -85,4 +85,4 @@ with set_akida_version(AkidaVersion.v1):
     model_snn = cnn2snn.convert(model_quantized)
     model_snn.summary()
     logging.info("Model quantized successfully")
-    model_snn.save("Akida_mobilenet_v1")
+    model_snn.save(model_name[:-5] + ".fbz")
