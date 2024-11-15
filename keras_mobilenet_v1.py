@@ -6,6 +6,8 @@ from DataLoading import image_loader
 import sys
 import json
 import logging
+from datetime import datetime
+
 
 
 logging.basicConfig(stream=sys.stderr, level=logging.INFO)
@@ -51,8 +53,45 @@ class PoseEstimationLoss(tf.keras.losses.Loss):
         
         return total_loss
 
+model_name = "./model_" + datetime.now().strftime("%Y%m%d_%H%M_") + ".keras"
+class CustomModel(tf.keras.Model):
+    def __init__(self, save_period=10, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.save_period = save_period
+        self.train_count = 0
+
+    def train_step(self, data):
+        # Unpack the data. Its structure depends on your model and
+        # on what you pass to `fit()`.
+        x, y = data
+
+        with tf.GradientTape() as tape:
+            y_pred = self(x, training=True)  # Forward pass
+            # Compute the loss value
+            # (the loss function is configured in `compile()`)
+            loss = self.compute_loss(y=y, y_pred=y_pred)
+
+        # Compute gradients
+        trainable_vars = self.trainable_variables
+        gradients = tape.gradient(loss, trainable_vars)
+        # Update weights
+        self.optimizer.apply_gradients(zip(gradients, trainable_vars))
+        # Update metrics (includes the metric that tracks the loss)
+        for metric in self.metrics:
+            if metric.name == "loss":
+                metric.update_state(loss)
+            else:
+                metric.update_state(y, y_pred)
+        # Return a dict mapping metric names to current value
+        self.train_count +=1
+        if self.train_count%self.save_period==0:
+            logging.info("Saving model " + model_name)
+            self.save(model_name)
+        return {m.name: m.result() for m in self.metrics}
+
 
 ### DEFINE MODEL
+logging.info(tf.config.list_physical_devices())
 
 base_model = MobileNet(include_top=False, alpha=0.7, input_shape=(240, 240, 3), weights=None)
 # base_model.trainable = False  # Freeze all layers in the base model
@@ -62,14 +101,14 @@ x = base_model.output
 # x = tf.keras.layers.Dense(1, activation='linear')(x)
 x = tf.keras.layers.Flatten()(x)
 output_l = tf.keras.layers.Dense(7, activation='linear')(x)
-model_keras = Model(inputs=base_model.input, outputs=output_l)
+model_keras = CustomModel(inputs=base_model.input, outputs=output_l)
 
 logging.info(model_keras.summary())
 
 ### TRAIN MODEL
 
 #TODO: load data
-position_dir = './train_dataset'
+position_dir = './generating_dataset'
 # position_file = 'position.csv'
 # # Load position data from CSV
 dataset = image_loader.ImageDataLoader(position_dir)()
@@ -79,13 +118,12 @@ dataset = image_loader.ImageDataLoader(position_dir)()
 #         y_test.append(row)
 
 model_keras.compile(
-    loss=PoseEstimationLoss(0.6,0.3,0.1),
+    loss=PoseEstimationLoss(1,0,0),
     optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3),
     metrics=['accuracy'])
 
 history = model_keras.fit(dataset, epochs=50, verbose=2)
-
-model_keras.save("./latest_model_3231.keras")
+model_keras.save(model_name)
 def set_default(obj):
     if isinstance(obj, set):
         return list(obj)

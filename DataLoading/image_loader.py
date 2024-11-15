@@ -3,11 +3,12 @@ import tensorflow as tf
 import pandas as pd
 
 class ImageDataLoader:
-    def __init__(self, root, batch_size=128, shuffle_count=1024, transform=None):
+    def __init__(self, root, batch_size=128, shuffle_count=1024, transform=None, normalize=True):
         self.root = root
         self.batch_size = batch_size
         self.shuffle_count = shuffle_count
         self.transform = transform  # Add transform parameter
+        self.normalize = normalize
     
     def __call__(self):
         dataset = self.load_dataset_from_directory(self.root)
@@ -18,7 +19,8 @@ class ImageDataLoader:
         # Load the image
         image = tf.io.read_file(image_path)
         image = tf.image.decode_png(image, channels=3)
-        image = tf.cast(image, tf.float32) / 255.0  # Normalize to [0, 1]
+        if self.normalize:
+            image = tf.cast(image, tf.float32) / 255.0  # Normalize to [0, 1]
 
         # Apply the transform if provided
         if self.transform is not None:
@@ -55,6 +57,11 @@ class ImageDataLoader:
         dataset = tf.data.Dataset.from_tensor_slices((image_paths, labels))
         dataset = dataset.map(self.load_image_and_label, num_parallel_calls=tf.data.AUTOTUNE)
         return dataset
+
+# Load the dataset
+#root_directory = "/home/brini/hackathon/image_dataset"
+
+#dataset = ImageDataLoader(root_directory, batch_size=32)()
 
     def _get_csv_filename(self, dirname: str) -> str:
         return dirname + '.csv'

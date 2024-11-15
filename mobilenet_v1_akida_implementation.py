@@ -1,4 +1,4 @@
-from cnn2snn import convert, set_akida_version, AkidaVersion
+from cnn2snn import set_akida_version, AkidaVersion
 import akida_models.imagenet.model_mobilenet as mobilenet
 from tensorflow.keras.models import Model
 import tensorflow as tf
@@ -6,8 +6,9 @@ import logging
 import json
 from DataLoading import image_loader
 
+
 PRETRAINED_MODEL = True
-POSITION_DIR = './train_dataset'
+POSITION_DIR = './generating_dataset'
 EPOCHS = 50
 BATCH_SIZE = 128
 
@@ -72,7 +73,7 @@ with set_akida_version(AkidaVersion.v1):
     # Add layers before the one to be removed
     for layer in layers_before:
         new_layer = layer
-        new_layer.trainable = False
+        new_layer.trainable = True
         # print("layer ", layer, layer.name, len(layer.trainable_weights))
         # print("new_layer ", new_layer, new_layer.name, len(new_layer.trainable_weights))
         model_keras.add(new_layer)
@@ -90,9 +91,9 @@ logging.info(model_keras.summary())
 # model_keras.summary()
 # print("Model compiled successfully!")
 ### TRAIN MODEL
-history = model_keras.fit(dataset, epochs=EPOCHS, batch_size=BATCH_SIZE, validation_split=0.1, verbose=2, shuffle=True)    
+history = model_keras.fit(dataset, epochs=EPOCHS, batch_size=BATCH_SIZE, verbose=2, shuffle=True)    
 
-model_keras.save("./latest_model_3231.keras")
+model_keras.save("./pretrained_model_unfreezed.keras")
 def set_default(obj):
     if isinstance(obj, set):
         return list(obj)
