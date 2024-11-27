@@ -1,12 +1,12 @@
 #!/bin/bash
 
 # Configuration variables
-REPOURL="git@github.com:username/repo.git"    # SSH URL of the remote git repository
-REPOPATH="/absolute/path/to/repo"             # IMPORTANT: Must be an absolute path to the repository
+REPOURL="git@github.com:nc-fortiss/2024-nc-hackathon-AstroSpikes.git"    # SSH URL of the remote git repository
+REPOPATH="/tmp/2024-nc-hackathon-AstroSpikes"             # IMPORTANT: Must be an absolute path to the repository
 BRANCHNAME="autostart"                        # Branch name to monitor
-JOBFILE="/path/to/job/data.log"              # Path to store commit information
-COMMAND="source new_job"                      # Command to execute when new changes are detected
-OUTFILE="/path/to/output.log"                # Path to store COMMAND output
+JOBFILE="/tmp/training.log"               # Path to store commit information
+COMMAND="echo 'THE AUTOSTART WORKS!!!'"         # Command to execute when new changes are detected
+OUTFILE="/tmp/output.log"                # Path to store COMMAND output
 
 # Function to ensure directory exists
 ensure_dir() {
@@ -49,7 +49,7 @@ git fetch origin "$BRANCHNAME"
 
 # Get the latest commit hash from remote and local
 REMOTE_HASH=$(git rev-parse "origin/$BRANCHNAME")
-LOCAL_HASH=$(git rev-parse HEAD)
+LOCAL_HASH=$(git rev-parse $BRANCHNAME)
 
 # Step 3: If there are new changes, process them
 if [ "$REMOTE_HASH" != "$LOCAL_HASH" ]; then
