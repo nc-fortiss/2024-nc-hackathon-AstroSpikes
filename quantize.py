@@ -10,7 +10,7 @@ from cnn2snn import set_akida_version, AkidaVersion
 
 FORCE_FULL_QUANTIZATION = False
 POSITION_DIR = './frames'
-model_name = "pretrained_model_unfreezed.keras"
+model_name = "TR002model_500epochs.keras"
 
 tf.keras.utils.get_custom_objects().update({"PoseEstimationLoss": PoseEstimationLoss})
 loaded_model = tf.keras.models.load_model(model_name)
@@ -78,7 +78,7 @@ with set_akida_version(AkidaVersion.v1):
     # model_quantized = quantize(model_keras, qparams=qparams,
                             #    samples=x_train, num_samples=1024, batch_size=100, epochs=2)
     dataset = ImageDataLoader(POSITION_DIR, transform=ImageDataLoader.center_crop_224x224, normalize=False)
-    model_quantized = quantizeml.models.quantize(model, qparams=qparams, samples=dataset)
+    model_quantized = quantizeml.models.quantize(model, qparams=qparams)
     #model_quantized = quantize(model, qparams=qparams)
     
     #cnn2snn.compatibility_checks.check_model_compatibility(model)
