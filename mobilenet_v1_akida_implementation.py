@@ -8,7 +8,7 @@ from DataLoading import image_loader
 
 
 PRETRAINED_MODEL = False
-POSITION_DIR = './frames'
+POSITION_DIR = './generating_dataset'
 EPOCHS = 1000
 BATCH_SIZE = 128
 
@@ -84,6 +84,13 @@ with set_akida_version(AkidaVersion.v1):
     model_keras.add(tf.keras.layers.Dense(7, activation='linear'))
     
     ### DEFINE MODEL
+    def scheduler(epoch, lr):
+        if epoch < 400:
+            return lr
+        else:
+            return lr * 0.1
+        
+    callback = tf.keras.callbacks.LearningRateScheduler(scheduler)
     model_keras.compile(loss=PoseEstimationLoss(0.6 ,0.3, 0.1),
                         optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3),
                         metrics=['accuracy'])
