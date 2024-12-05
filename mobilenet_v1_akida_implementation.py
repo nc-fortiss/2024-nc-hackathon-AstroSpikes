@@ -5,10 +5,12 @@ import tensorflow as tf
 import logging
 import json
 from DataLoading import image_loader
+from datetime import datetime
 
 
 PRETRAINED_MODEL = False
-POSITION_DIR = './generating_dataset'
+POSITION_DIR_TRAIN = './generated_dataset/train'
+POSITION_DIR_TEST = './generated_dataset/test'
 EPOCHS = 1000
 BATCH_SIZE = 128
 
@@ -54,19 +56,17 @@ class PoseEstimationLoss(tf.keras.losses.Loss):
         
         return total_loss
 
-model_name = "./TR002_model_500epochs_orientation_pose" + str(EPOCHS) + ".keras"
+model_name = "./model_" + datetime.now().strftime("%Y%m%d_%H%M_") + ".keras"
 logging.info("Training the model : " + model_name)
 with set_akida_version(AkidaVersion.v1):
     if PRETRAINED_MODEL:
         base_model = mobilenet.mobilenet_imagenet_pretrained(alpha=1.0, quantized=False)
-        dataset = image_loader.ImageDataLoader(POSITION_DIR, transform=image_loader.ImageDataLoader.center_crop_224x224)()
         
     else:
         base_model = mobilenet.mobilenet_imagenet(input_shape=(224, 224, 3), alpha=1.0, include_top=False, input_scaling=None)
-        dataset = image_loader.ImageDataLoader(POSITION_DIR, transform=image_loader.ImageDataLoader.center_crop_224x224)()
 
-    base_model.summary()
-
+    train_dataset = image_loader.ImageDataLoader(POSITION_DIR_TRAIN, transform=image_loader.ImageDataLoader.center_crop_224x224)()
+    test_dataset = image_loader.ImageDataLoader(POSITION_DIR_TEST, transform=image_loader.ImageDataLoader.center_crop_224x224)()
     # Separate layers before and after the layer to be removed
     layers_before = base_model.layers[:-2]  # Layers before the ones to remove
 
@@ -87,20 +87,31 @@ with set_akida_version(AkidaVersion.v1):
     def scheduler(epoch, lr):
         if epoch < 400:
             return lr
-        else:
-            return lr * 0.1
+        elif epoch < 800 :
+            return 1e-4
+        else :
+            return 1e-5
         
-    callback = tf.keras.callbacks.LearningRateScheduler(scheduler)
+    layers_callback = tf.keras.callbacks.LearningRateScheduler(scheduler)
+    checkpoint_callback = tf.keras.callbacks.ModelCheckpoint("/home/lecomte/AstroSpikes/2024-nc-hackathon-AstroSpikes/" + model_name,
+    monitor='val_loss',
+    verbose=0,
+    save_best_only=True,
+    mode='min',
+    save_freq='epoch',
+    initial_value_threshold=None
+)
+
     model_keras.compile(loss=PoseEstimationLoss(0.6 ,0.3, 0.1),
                         optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3),
                         metrics=['accuracy'])
     
 logging.info(model_keras.summary())
+logging.info("Training model " + model_name)
 
-# model_keras.summary()
-# print("Model compiled successfully!")
 ### TRAIN MODEL
-history = model_keras.fit(dataset, epochs=EPOCHS, batch_size=BATCH_SIZE, verbose=2, shuffle=True)    
+history = model_keras.fit(train_dataset, epochs=EPOCHS, batch_size=BATCH_SIZE,  \
+                          callbacks=[layers_callback, checkpoint_callback], verbose=2, shuffle=True, validation_data=test_dataset)    
 
 model_keras.save(model_name)
 def set_default(obj):
