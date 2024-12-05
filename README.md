@@ -19,9 +19,7 @@ Tasks:
 
 - Model implementation
 
-- Training infrastructure setup
-
-- Dataloader
+- Test autostart branch
 
 - Event to frame conversion (see https://tonic.readthedocs.io/en/latest/)
 
