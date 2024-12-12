@@ -7,6 +7,8 @@ BRANCHNAME="autostart"                        # Branch name to monitor
 JOBFILE="/tmp/training.log"               # Path to store commit information
 COMMAND="echo 'THE AUTOSTART WORKS!!!'"         # Command to execute when new changes are detected
 OUTFILE="/tmp/output.log"                # Path to store COMMAND output
+CLONED=0
+STARTDIR=$(pwd)
 
 # Function to ensure directory exists
 ensure_dir() {
@@ -27,6 +29,16 @@ ensure_file() {
     fi
 }
 
+cleanup() {
+    # Change to the original branch
+    git switch "$STARTBRANCH"
+    # Change back to the original directory
+    cd "$STARTDIR" || exit 1
+}
+
+# Register cleanup function
+trap cleanup EXIT INT TERM
+
 # Step 1: Check and prepare repository
 if [ ! -d "$REPOPATH" ]; then
     # Create parent directory if it doesn't exist
@@ -38,10 +50,13 @@ if [ ! -d "$REPOPATH" ]; then
         echo "Failed to clone repository"
         exit 1
     fi
+    CLONED=1
 fi
 
 # Change to repository directory
 cd "$REPOPATH" || exit 1
+
+STARTBRANCH=$(git branch --show-current)
 
 # Step 2: Check for new commits
 # Fetch latest changes from remote
@@ -52,7 +67,10 @@ REMOTE_HASH=$(git rev-parse "origin/$BRANCHNAME")
 LOCAL_HASH=$(git rev-parse $BRANCHNAME)
 
 # Step 3: If there are new changes, process them
-if [ "$REMOTE_HASH" != "$LOCAL_HASH" ]; then
+if [ "$REMOTE_HASH" != "$LOCAL_HASH" ] || [ $CLONED -eq 1 ]; then
+    # Switch to the specified branch
+    git switch "$BRANCHNAME"
+
     # Pull the latest changes
     git pull origin "$BRANCHNAME"
     
@@ -84,3 +102,7 @@ if [ "$REMOTE_HASH" != "$LOCAL_HASH" ]; then
 else
     echo "No new changes detected"
 fi
+
+
+# Step 4: Cleanup
+cleanup
