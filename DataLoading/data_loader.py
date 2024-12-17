@@ -7,7 +7,8 @@ from PIL import Image
 import shutil
 from functools import partial
 
-import filters, transformations
+from transformations import Transformations
+from filters import Filters
 
 root_dir = "/Users/jost/Downloads/SPADES"
 
@@ -127,21 +128,26 @@ class SamplesDataLoader(tonic.Dataset):
         """
         event_file, label_file = self.samples[idx]
         events = self._load_events(event_file)
+
+        if len(events) == 0:
+            print("Unable to load events for sample at index ", idx)
+            return None, None
+
         if label_file is not None:
             labels = self._load_labels(label_file)
         else:
             labels = None
         
-        if self.filter(events) is False:
+        if self.filter(events=events) is False:
             return (None, None)
         
         #transform events and create frames
-        event_frames = self.transform(events)
+        event_frames = self.transform(events=events)
 
         sample = event_frames, labels
         return sample
 
-    def save_sample(self, idx, file_path):
+    def save_sample(self, idx, file_path) -> bool:
         """
         Save a sample from the dataset at the given index to a file.
         
@@ -160,15 +166,15 @@ class SamplesDataLoader(tonic.Dataset):
 
         event_frames, labels = self.__getitem__(idx)
 
-        if events is None:
-            return
+        if event_frames is None or labels is None:
+            return False
 
         file_path = file_path + '/' + traj_name + '/'
         if not os.path.exists(file_path):
             os.makedirs(file_path)
 
         # rgb_frames = self.generate_rgb_from_samples(events)
-        for i, frame in enumerate(rgb_frames):
+        for i, frame in enumerate(event_frames):
             im = Image.fromarray(frame)
             number = f"{i:03}"
             im.save(f"{file_path}img{number}_{traj_name[4:]}.png")
@@ -179,6 +185,7 @@ class SamplesDataLoader(tonic.Dataset):
         csv_dest_path = file_path + traj_name + '.csv'
         shutil.copy(csv_file_path, csv_dest_path)
 
+        return True
 
 
 
@@ -206,14 +213,20 @@ class SamplesDataLoader(tonic.Dataset):
     
 
 if __name__ == "__main__":
-        root_dir= "/home/lecomte/AstroSpikes/SPADES"
+        # root_dir= "/home/lecomte/AstroSpikes/SPADES"
+        root_dir = "/Users/jost/Downloads/SPADES"
         output_dir= "./generating_dataset" #os.path.join(root_dir, "train_dataset")
         os.makedirs(output_dir, exist_ok=True)
-        t = trasformations.three_c_representation
-        filter = partial(filters.get_distribution, boundries=[(280, False), (1000, True), (1280, False)])
-        dataset = SamplesDataLoader(root_dir=root_dir, dataset_type="synthetic", transform=t, filter=filter)
-        for idx in range(len(dataset.samples)):
-            dataset.save_sample(idx, output_dir)
-            print(f"Sample {idx} saved successfully.")
+
+        t = Transformations().to_voxel_grid
+        f = Filters([(280, False), (1000, True), (1280, False)]).get_distribution
+
+        data_loader = SamplesDataLoader(root_dir=root_dir, dataset_type="synthetic", transform=t, filter=f)
+
+        print("Successfully initialized data loader.")
+
+        for idx in range(len(data_loader.samples)):
+            if data_loader.save_sample(idx, output_dir):
+                print(f"Sample {idx} saved successfully.")
              
         print ("DONE")
