@@ -6,6 +6,7 @@ import numpy as np
 from PIL import Image
 import shutil
 from functools import partial
+import time
 
 from transformations import Transformations
 from filters import Filters
@@ -218,15 +219,15 @@ if __name__ == "__main__":
         output_dir= "./generating_dataset" #os.path.join(root_dir, "train_dataset")
         os.makedirs(output_dir, exist_ok=True)
 
-        t = Transformations().to_voxel_grid
+        t = Transformations().lnes2
         f = Filters([(280, False), (1000, True), (1280, False)]).get_distribution
 
         data_loader = SamplesDataLoader(root_dir=root_dir, dataset_type="synthetic", transform=t, filter=f)
 
         print("Successfully initialized data loader.")
 
+        start = time.time()
         for idx in range(len(data_loader.samples)):
             if data_loader.save_sample(idx, output_dir):
                 print(f"Sample {idx} saved successfully.")
-             
-        print ("DONE")
+        print("DONE -- Time taken: ", time.time()-start)
