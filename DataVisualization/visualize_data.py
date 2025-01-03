@@ -137,6 +137,7 @@ class Visualizer():
     def get_model_prediction(self, img):
         """ Get model prediction for the input image """
         img = tf.expand_dims(img, axis = 0)
+        img = tf.image.resize_with_crop_or_pad(img, target_height=224, target_width=224)
         # print(img.shape)
         
         [[x,y,z,qx,qy,qz,qw]] = self.model.predict(img)  # Get model predictions for the input image
@@ -180,7 +181,7 @@ class Visualizer():
         self.visualize_both(img, q_label, r_label, q_pred, r_pred, ax)
         plt.savefig(os.path.join(self.dest_dir, img_name))
         plt.close()
-
+        return q_label, r_label, q_pred, r_pred
 
 # if __name__ == '__main__':
 #     root_frames_dir = "/Users/jost/Jost/Code/2024-nc-hackathon-spades/frames"

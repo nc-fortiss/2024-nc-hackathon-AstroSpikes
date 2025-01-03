@@ -3,5 +3,5 @@ data
 *.out
 *.keras
 *.sif
-
+visualizations/*.png
 *__pycache__*

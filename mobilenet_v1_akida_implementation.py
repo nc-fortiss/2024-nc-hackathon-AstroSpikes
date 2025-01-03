@@ -56,7 +56,7 @@ class PoseEstimationLoss(tf.keras.losses.Loss):
         
         return total_loss
 
-model_name = "./model_" + datetime.now().strftime("%Y%m%d_%H%M_") + ".keras"
+model_name = "./model_pretrained" + datetime.now().strftime("%Y%m%d_%H%M_") + ".keras"
 logging.info("Training the model : " + model_name)
 with set_akida_version(AkidaVersion.v1):
     if PRETRAINED_MODEL:
@@ -86,9 +86,9 @@ with set_akida_version(AkidaVersion.v1):
     ### DEFINE MODEL
     def scheduler(epoch, lr):
         if epoch < 400:
-            return lr
-        elif epoch < 800 :
             return 1e-4
+        elif epoch < 800 :
+            return 1e-5
         else :
             return 1e-5
         
@@ -101,8 +101,8 @@ with set_akida_version(AkidaVersion.v1):
     save_freq='epoch',
     initial_value_threshold=None
 )
-
-    model_keras.compile(loss=PoseEstimationLoss(0.6 ,0.3, 0.1),
+    model_keras.load_weights("/home/lecomte/AstroSpikes/2024-nc-hackathon-AstroSpikes/model_20241203_1634_.keras")
+    model_keras.compile(loss=PoseEstimationLoss(0.6,0.3, 0.1),
                         optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3),
                         metrics=['accuracy'])
     
