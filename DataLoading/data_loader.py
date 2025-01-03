@@ -5,23 +5,27 @@ import os
 import numpy as np
 from PIL import Image
 import shutil
+from functools import partial
+import time
 
-root_dir = "/Users/jost/Downloads/SPADES"
+from omegaconf import OmegaConf
+
+from transformations import Transformations
+from filters import Filters
 
 class SamplesDataLoader(tonic.Dataset):
-    def __init__(self, root_dir, dataset_type="synthetic", transform=None, threshold=0.8):
+    def __init__(self, dataset_dir, dataset_type="synthetic", transform=None, filter=None):
         """
         Args:
-            root_dir (str): Root directory containing the synthetic or Real dataset folders.
+            dataset_dir (str): Root directory containing the synthetic or Real dataset folders.
             dataset_type (str): Type of dataset to load ("Synthetic" or "Real").
             transform (callable, optional): Optional transform to apply to the events.
         """
-        self.root_dir = root_dir
+        self.dataset_dir = dataset_dir
         self.dataset_type = dataset_type
         self.samples = self._load_samples()
         self.transform = transform
-        self.threshold = threshold
-        self.boundries = [(280, False), (1000, True), (1280, False)]
+        self.filter = filter
 
 
     def _load_samples(self):
@@ -32,10 +36,10 @@ class SamplesDataLoader(tonic.Dataset):
             list of tuples: Each tuple contains paths to an event file and its corresponding label file (for synthetic data).
         """
         samples = []
-        events_dir = os.path.join(self.root_dir, self.dataset_type, "events")
+        events_dir = os.path.join(self.dataset_dir, self.dataset_type, "events")
         
         if self.dataset_type == "synthetic":
-            labels_dir = os.path.join(self.root_dir, self.dataset_type, "labels")
+            labels_dir = os.path.join(self.dataset_dir, self.dataset_type, "labels")
             for file_name in sorted(os.listdir(events_dir)):
                 if file_name.endswith(".csv"):
                     event_file = os.path.join(events_dir, file_name)
@@ -47,31 +51,6 @@ class SamplesDataLoader(tonic.Dataset):
                     event_file = os.path.join(events_dir, file_name)
                     samples.append((event_file, None))
         return samples
-
-    def __getitem__(self, idx):
-        """
-        Load and return a sample from the dataset at the given index.
-        
-        Args:
-            idx (int): Index of the sample to return.
-        
-        Returns:
-            dict: A dictionary containing the event data and its corresponding label (if available).
-        """
-        event_file, label_file = self.samples[idx]
-        events = self._load_events(event_file)
-        if label_file is not None:
-            labels = self._load_labels(label_file)
-        else:
-            labels = None
-        
-        if self._get_distribution(events) < self.threshold:
-            return (None, None)
-        
-        events = self.transform(events)
-
-        sample = events, labels
-        return sample
 
     def _load_events(self, file_path):
         """
@@ -117,29 +96,38 @@ class SamplesDataLoader(tonic.Dataset):
         labels = pd.read_csv(file_path)
         return labels.to_records(index=False)
 
-
-    def _get_distribution(self, events, boundries: list[tuple[int, bool]]=None) -> bool:
-        """Filters out the traces where events are outside the center of the image
-        boundries: for eg. [(280, False), (360, True)] means that the x values should be between 280 and 360"""
-        if boundries is None:
-            boundries = self.boundries
-            
-        band_edges = np.array([boundry[0] for boundry in boundries])
-        band_active = np.array([boundry[1] for boundry in boundries])
-
-
-        sample_events_x = np.array([smpl[1] for smpl in events])
-        # only three bins
-        events_x_digitize = np.digitize(sample_events_x, band_edges, right=True)
-        values, counts = np.unique(events_x_digitize, return_counts=True)
-
-        fraction_active = np.sum(counts[band_active]) / np.sum(counts)
-
+    def __getitem__(self, idx):
+        """
+        Load and return a sample from the dataset at the given index.
         
-        return fraction_active
+        Args:
+            idx (int): Index of the sample to return.
+        
+        Returns:
+            dict: A dictionary containing the event data and its corresponding label (if available).
+        """
+        event_file, label_file = self.samples[idx]
+        events = self._load_events(event_file)
 
+        if len(events) == 0:
+            print("Unable to load events for sample at index ", idx)
+            return None, None
 
-    def save_sample(self, idx, file_path):
+        if label_file is not None:
+            labels = self._load_labels(label_file)
+        else:
+            labels = None
+        
+        if self.filter(events=events) is False:
+            return (None, None)
+        
+        #transform events and create frames
+        event_frames = self.transform(events=events)
+
+        sample = event_frames, labels
+        return sample
+
+    def save_sample(self, idx, file_path) -> bool:
         """
         Save a sample from the dataset at the given index to a file.
         
@@ -156,57 +144,85 @@ class SamplesDataLoader(tonic.Dataset):
         # if not os.path.exists(file_path):
         #     os.makedirs(file_path)
 
-        events, labels = self.__getitem__(idx)
+        event_frames, labels = self.__getitem__(idx)
 
-        if events is None:
-            return
+        if event_frames is None or labels is None:
+            return False
 
         file_path = file_path + '/' + traj_name + '/'
         if not os.path.exists(file_path):
             os.makedirs(file_path)
 
-        rgb_frames = self.generate_rgb_from_samples(events)
-        for i, frame in enumerate(rgb_frames):
+        # rgb_frames = self.generate_rgb_from_samples(events)
+        for i, frame in enumerate(event_frames):
             im = Image.fromarray(frame)
             number = f"{i:03}"
             im.save(f"{file_path}img{number}_{traj_name[4:]}.png")
             im.save(f"{file_path}img{number}_{traj_name[4:]}.png")
         
         # copy csv file to folder
-        csv_file_path = root_dir + '/synthetic/labels/' + traj_name + '.csv'
+        csv_file_path = dataset_dir + '/synthetic/labels/' + traj_name + '.csv'
         csv_dest_path = file_path + traj_name + '.csv'
         shutil.copy(csv_file_path, csv_dest_path)
 
-
-
-
-    def generate_rgb_from_samples(self, sample_events):
-        ret = []
-        for frame in range(0, (len(sample_events)//3)*3, 3):
-            #empty frame
-            rgb_frame = np.zeros((240,240,3), dtype=np.uint8)
-            #stack 3 frames into 3 channels
-            #scale [0,1] to [0,255]
-            rgb_frame[:,:,0] = sample_events[frame]*255
-            rgb_frame[:,:,1] = sample_events[frame+1]*255
-            rgb_frame[:,:,2] = sample_events[frame+2]*255
-            ret.append(rgb_frame)
-        return ret
-    
+        return True
 
 if __name__ == "__main__":
-        root_dir= "/home/lecomte/AstroSpikes/SPADES"
-        output_dir= "./generating_dataset" #os.path.join(root_dir, "train_dataset")
-        os.makedirs(output_dir, exist_ok=True)
-        transform_queue = transforms.Compose([
-                    transforms.MergePolarities(),
-                    transforms.CenterCrop(sensor_size=(1280,720,1), size = (720,720)),
-                    transforms.Downsample(spatial_factor=240/720),
-                    transforms.ToTimesurface(dt=333,tau=200,sensor_size=(240,240,1))
-                ])
-        dataset = SamplesDataLoader(root_dir=root_dir, dataset_type="synthetic", transform=transform_queue)
-        for idx in range(len(dataset.samples)):
-            dataset.save_sample(idx, output_dir)
-            print(f"Sample {idx} saved successfully.")
-             
-        print ("DONE")
+
+    """
+    DONT CHANGE ANYTHING BELOW THIS LINE!!!
+    Configurations for the data loader can be changed at conf/data_loader_conf.yaml
+    """
+
+    # Load configuration file
+    config = OmegaConf.load("conf/data_loader_conf.yaml")
+
+    # Load root directory and output directory
+    dataset_dir = config.paths.dataset_dir
+    output_dir = config.paths.output_dir
+    os.makedirs(output_dir, exist_ok=True)
+
+    print(f"Dataset directory: {dataset_dir}")
+    print(f"Output directory: {output_dir}\n")
+
+    # Load configuration parameters
+    transformation_instance = Transformations()
+    filter_instance = Filters(config.filter.parameters.conditions)
+
+    # Mapping of event representations and filters
+    event_representations = {
+        "two_polarity_time_surface": transformation_instance.two_polarity_time_surface,
+        "two_d_histogram": transformation_instance.two_d_histogram,
+        "lnes": transformation_instance.lnes,
+        "lnes2": transformation_instance.lnes2,
+        "to_voxel_grid": transformation_instance.to_voxel_grid,
+        "three_c_representation": transformation_instance.three_c_representation,
+    }
+
+    filters = {
+        "get_distribution": filter_instance.get_distribution,
+    }
+
+    # Initialize data loader
+    t = event_representations[config.transformation.method]
+    f = filters[config.filter.method]
+    d_type = config.dataset_type
+
+    print(f"Event representation: {config.transformation.method}")
+    print(f"Filter: {config.filter.method}")
+    print(f"Dataset type: {d_type}\n")
+
+    data_loader = SamplesDataLoader(dataset_dir=dataset_dir, dataset_type=d_type, transform=t, filter=f)
+    print(f"Successfully initialized data loader.")
+
+    # Generate RGB frames from samples and save them
+    start = time.time()
+    print(f"Total samples to process: {len(data_loader.samples)}\n")
+
+    for idx in range(len(data_loader.samples)):
+        if data_loader.save_sample(idx, output_dir):
+            print(f"✅ Sample {idx + 1}/{len(data_loader.samples)} saved successfully.")
+        else:
+            print(f"❌ Sample {idx + 1}/{len(data_loader.samples)} skipped (filter or empty).")
+
+    print("\nDONE -- Time taken: {:.2f} seconds".format(time.time() - start))
