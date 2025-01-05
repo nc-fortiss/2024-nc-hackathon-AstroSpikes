@@ -5,11 +5,11 @@ Configuration file for the data loader
 # Paths to dataset and output directories
 paths:
   dataset_dir: "/home/lecomte/AstroSpikes/SPADES" # Root directory for the dataset
-  output_dir: "./generated_dataset/two_d_histogram"          # Directory where processed data will be saved
+  output_dir: "./generated_dataset/lnes2"          # Directory where processed data will be saved
 
 # Transformation method to process event data
 transformation:
-  method: "two_d_histogram"  # Options: two_polarity_time_surface, two_d_histogram, lnes, lnes2, etc.
+  method: "lnes2"  # Options: two_polarity_time_surface, two_d_histogram, lnes, lnes2, etc.
 
 # Filter method and parameters
 filter:
