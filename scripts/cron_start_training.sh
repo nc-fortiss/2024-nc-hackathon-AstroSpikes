@@ -76,18 +76,19 @@ for BRANCH in $BRANCHES; do
     # Process tags in this branch
     TAGS=$(git tag -l "RUN[0-9A-Za-z_]*")
     
+    echo "Processing tags in branch: $BRANCH"
     for TAG in $TAGS; do
         if ! grep -Fxq "$TAG" "$TAGFILE"; then
             echo "Processing tag: $TAG in branch: $BRANCH"
             
             git checkout "$TAG"
             
-            {
+            # {
                 echo "=== Processing TAG: $TAG (Branch: $BRANCH) at $(date '+%Y-%m-%d %H:%M:%S') ==="
                 eval "$COMMAND"
                 echo "=== Finished processing TAG: $TAG (Branch: $BRANCH) at $(date '+%Y-%m-%d %H:%M:%S') ==="
                 echo ""
-            } >> "$OUTFILE" 2>&1
+            # } >> "$OUTFILE" 2>&1
             
             echo "$TAG" >> "$TAGFILE"
             echo "Tag $TAG processed successfully"

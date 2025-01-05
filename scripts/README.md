@@ -8,7 +8,7 @@
 
 
 ## Overview
-The `cron_start_training.sh` script automates the detection and processing of new Git tags with the pattern `RUNXXX` (where `XXX` is any number). It is designed to monitor a specific Git branch and trigger training or other predefined tasks whenever it encounters an unprocessed tag.
+The `cron_start_training.sh` script automates the detection and processing of new Git tags with the pattern `RUNxxx` (where `xxx` are alphanumeric characters and underscores). Make sure to make your tag unique! It is designed to monitor a specific Git branch and trigger training or other predefined tasks whenever it encounters an unprocessed tag.
 
 This script is intended to be run periodically using `crontab`.
 
@@ -107,3 +107,5 @@ git log --pretty=oneline
 # git tag <tag_name> <commit_hash>
 git tag RUN001 9fceb02
 ```
+
+### Cherry-picking commits from your branch
