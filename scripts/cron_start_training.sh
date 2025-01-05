@@ -5,7 +5,8 @@ REPOURL="git@github.com:nc-fortiss/2024-nc-hackathon-AstroSpikes.git"    # SSH U
 REPOPATH="/tmp/2024-nc-hackathon-AstroSpikes"             # IMPORTANT: Must be an absolute path to the repository
 BRANCHNAME="autostart"                        # Branch name to monitor
 JOBFILE="/tmp/training.log"               # Path to store commit information
-COMMAND="echo 'THE AUTOSTART WORKS!!!'"         # Command to execute when new changes are detected
+TAGFILE="/tmp/processed_tags.txt"         # File to store processed tags
+COMMAND="echo 'Running training for TAG: $TAG'"  # Command to execute for each tag
 OUTFILE="/tmp/output.log"                # Path to store COMMAND output
 CLONED=0
 STARTDIR=$(pwd)
@@ -58,51 +59,44 @@ cd "$REPOPATH" || exit 1
 
 STARTBRANCH=$(git branch --show-current)
 
-# Step 2: Check for new commits
-# Fetch latest changes from remote
+# Step 2: Fetch latest changes from remote
 git fetch origin "$BRANCHNAME"
 
-# Get the latest commit hash from remote and local
-REMOTE_HASH=$(git rev-parse "origin/$BRANCHNAME")
-LOCAL_HASH=$(git rev-parse $BRANCHNAME)
+# Pull the latest changes
+git switch "$BRANCHNAME"
+git pull origin "$BRANCHNAME"
 
-# Step 3: If there are new changes, process them
-if [ "$REMOTE_HASH" != "$LOCAL_HASH" ] || [ $CLONED -eq 1 ]; then
-    # Switch to the specified branch
-    git switch "$BRANCHNAME"
+# Ensure TAGFILE exists
+ensure_file "$TAGFILE"
 
-    # Pull the latest changes
-    git pull origin "$BRANCHNAME"
-    
-    # Ensure JOBFILE exists
-    ensure_file "$JOBFILE"
-    
-    # Get commit information and append to JOBFILE
-    {
-        echo "---"
-        echo "Timestamp: $(date '+%Y-%m-%d %H:%M:%S')"
-        echo "Commit Hash: $REMOTE_HASH"
-        echo "Commit Message: $(git log -1 --pretty=%B)"
-        echo "Commit Date: $(git log -1 --pretty=%cd --date=format:'%Y-%m-%d %H:%M:%S')"
-        echo ""
-    } >> "$JOBFILE"
-    
-    # Ensure OUTFILE exists
-    ensure_file "$OUTFILE"
-    
-    # Execute the command and redirect output
-    {
-        echo "=== Command execution started at $(date '+%Y-%m-%d %H:%M:%S') ==="
-        eval "$COMMAND"
-        echo "=== Command execution finished at $(date '+%Y-%m-%d %H:%M:%S') ==="
-        echo ""
-    } >> "$OUTFILE" 2>&1
-    
-    echo "Changes processed successfully"
-else
-    echo "No new changes detected"
-fi
+# Step 3: Check for unprocessed tags and run training
+# Extract all tags matching the pattern RUNXXX
+TAGS=$(git tag -l "RUN[0-9]*")
 
+for TAG in $TAGS; do
+    if ! grep -Fxq "$TAG" "$TAGFILE"; then
+        # New tag detected, process it
+        echo "Processing tag: $TAG"
+
+        # Checkout the tag
+        git checkout "$TAG"
+
+        # Run the command for the tag
+        {
+            echo "=== Processing TAG: $TAG at $(date '+%Y-%m-%d %H:%M:%S') ==="
+            eval "$COMMAND"
+            echo "=== Finished processing TAG: $TAG at $(date '+%Y-%m-%d %H:%M:%S') ==="
+            echo ""
+        } >> "$OUTFILE" 2>&1
+
+        # Append the tag to TAGFILE
+        echo "$TAG" >> "$TAGFILE"
+
+        echo "Tag $TAG processed successfully"
+    else
+        echo "Tag $TAG already processed"
+    fi
+done
 
 # Step 4: Cleanup
 cleanup
