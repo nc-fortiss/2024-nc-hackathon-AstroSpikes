@@ -5,7 +5,7 @@ REPOURL="git@github.com:nc-fortiss/2024-nc-hackathon-AstroSpikes.git"
 REPOPATH="/tmp/2024-nc-hackathon-AstroSpikes"
 JOBFILE="/tmp/training.log"
 TAGFILE="/tmp/processed_tags.txt"
-COMMAND="echo 'Running training for TAG: $TAG'"
+COMMAND="echo 'Running training for TAG: $TAG'" # REPLACE THIS COMMAND TO START TRAINING
 OUTFILE="/tmp/output.log"
 CLONED=0
 STARTDIR=$(pwd)
@@ -32,6 +32,34 @@ cleanup() {
     cd "$STARTDIR" || exit 1
 }
 
+is_valid_tag() {
+    [[ "$1" =~ ^RUN[0-9A-Za-z_]*$ ]] || return 1
+}
+
+get_branches () {
+  git branch --remotes --format='%(refname:short)'
+}
+
+get_run_tags() {
+   git tag -l "RUN[0-9A-Za-z_]*"
+}
+
+# takes function name as argument
+# returns array of lines from command output
+cmd_to_array() {
+   local cmd=$1
+   local tmp_arr=()
+   local tempfile="/tmp/cmd_output_$$.txt"
+   
+   $cmd | grep -v HEAD | sed 's/origin\///' | tr -d ' ' | grep -v '^$' > "$tempfile"
+   while IFS= read -r line; do
+       tmp_arr+=("$line")
+   done < "$tempfile"
+   rm "$tempfile"
+   
+   echo "${tmp_arr[@]}"
+}
+
 trap cleanup EXIT INT TERM
 
 # Repository setup
@@ -49,53 +77,36 @@ cd "$REPOPATH" || exit 1
 
 STARTBRANCH=$(git branch --show-current)
 
+echo "Fetching latest changes"
 # Fetch all branches and tags
 git fetch --all
 git fetch --tags
 
-# Get list of all branches (local and remote)
-BRANCHES=$(git branch -r | grep -v HEAD | sed 's/origin\///' && git branch --list | sed 's/^* //')
-BRANCHES=$(echo "$BRANCHES" | sort -u)
+TAGS=($(cmd_to_array get_run_tags))
 
-ensure_file "$TAGFILE"
-
-# Process each branch
-for BRANCH in $BRANCHES; do
-    echo "Processing branch: $BRANCH"
-    
-    # Try to switch to branch
-    if ! git switch "$BRANCH" 2>/dev/null; then
-        if ! git switch "origin/$BRANCH" 2>/dev/null; then
-            echo "Cannot switch to branch $BRANCH, skipping"
-            continue
-        fi
+echo "Processing tags in branch: $BRANCH"
+for TAG in $TAGS; do
+    if ! is_valid_tag "$TAG"; then
+        echo "Invalid tag: $TAG, skipping"
+        continue
     fi
-    
-    git pull origin "$BRANCH" 2>/dev/null
-
-    # Process tags in this branch
-    TAGS=$(git tag -l "RUN[0-9A-Za-z_]*")
-    
-    echo "Processing tags in branch: $BRANCH"
-    for TAG in $TAGS; do
-        if ! grep -Fxq "$TAG" "$TAGFILE"; then
-            echo "Processing tag: $TAG in branch: $BRANCH"
-            
-            git checkout "$TAG"
-            
-            # {
-                echo "=== Processing TAG: $TAG (Branch: $BRANCH) at $(date '+%Y-%m-%d %H:%M:%S') ==="
-                eval "$COMMAND"
-                echo "=== Finished processing TAG: $TAG (Branch: $BRANCH) at $(date '+%Y-%m-%d %H:%M:%S') ==="
-                echo ""
-            # } >> "$OUTFILE" 2>&1
-            
-            echo "$TAG" >> "$TAGFILE"
-            echo "Tag $TAG processed successfully"
-        else
-            echo "Tag $TAG already processed"
-        fi
-    done
+    if ! grep -Fxq "$TAG" "$TAGFILE"; then
+        echo "=== Processing TAG: $TAG (Branch: $BRANCH) at $(date '+%Y-%m-%d %H:%M:%S') ==="
+        
+        git checkout "$TAG"
+        
+        {
+            echo "=== Processing TAG: $TAG (Branch: $BRANCH) at $(date '+%Y-%m-%d %H:%M:%S') ==="
+            eval "$COMMAND"
+            echo "=== Finished processing TAG: $TAG (Branch: $BRANCH) at $(date '+%Y-%m-%d %H:%M:%S') ==="
+            echo ""
+        } >> "$OUTFILE" 2>&1
+        
+        echo "=== Finished processing TAG: $TAG (Branch: $BRANCH) at $(date '+%Y-%m-%d %H:%M:%S') ==="
+        echo "$TAG - $(date '+%Y-%m-%d %H:%M:%S')" >> "$TAGFILE"
+    else
+        echo "Tag $TAG already processed"
+    fi
 done
 
 cleanup

@@ -8,7 +8,7 @@
 
 
 ## Overview
-The `cron_start_training.sh` script automates the detection and processing of new Git tags with the pattern `RUNxxx` (where `xxx` are alphanumeric characters and underscores). Make sure to make your tag unique! It is designed to monitor a specific Git branch and trigger training or other predefined tasks whenever it encounters an unprocessed tag.
+The `cron_start_training.sh` script automates the detection and processing of all Git tags in a repository that match the pattern `RUNXXX` (or `RUN[0-9A-Za-z_]*` for extended tag names). It ensures no duplicate processing by maintaining a log of processed tags. The script is designed to consider **all tags across the repository** instead of limiting itself to a single branch.
 
 This script is intended to be run periodically using `crontab`.
 
@@ -16,26 +16,25 @@ This script is intended to be run periodically using `crontab`.
 
 ## How It Works
 1. **Repository Setup**:
-   - The script checks if the repository is already cloned. If not, it clones the repository from the configured remote URL.
-   - It then switches to the specified branch (`BRANCHNAME`) and pulls the latest changes.
+   - The script ensures the repository is cloned locally. If not, it clones the repository from the configured `REPOURL`.
+   - It fetches and updates all branches and tags in the repository.
 
 2. **Tag Detection**:
-   - It lists all tags in the repository matching the pattern `RUNXXX`.
-   - For each tag, it checks if the tag has already been processed by looking for it in the `processed_tags.txt` file.
+   - The script lists all tags in the repository matching the pattern `RUN[0-9A-Za-z_]*`.
+   - For each tag, it checks if it has already been processed using `processed_tags.txt`.
 
-3. **Tag Processing**:
-   - If a tag is new, the script:
-     1. Checks out the tag.
-     2. Executes the training command (`COMMAND`) while logging its output to `output.log`.
-     3. Marks the tag as processed by appending it to `processed_tags.txt`.
+3. **Tag Validation**:
+   - Tags must follow the pattern `RUN[0-9A-Za-z_]*`.
+   - Invalid tags are ignored.
 
-4. **Logging**:
-   - The script logs key operations and outputs to specified files:
-     - `output.log`: Stores the output of the training command.
-     - `training.log`: Records metadata about processed tags.
+4. **Tag Processing**:
+   - If a tag is valid and unprocessed, the script:
+     1. Checks out the commit associated with the tag.
+     2. Executes the training command (`COMMAND`), logging the output to `output.log`.
+     3. Marks the tag as processed in `processed_tags.txt`.
 
 5. **Repetition**:
-   - The script is intended to run periodically (e.g., every 10 minutes) using a `crontab` entry.
+   - The script is designed to run periodically using `crontab` to detect and process new tags.
 
 ---
 
@@ -47,14 +46,13 @@ Below are the key parameters and variables in the script:
 |---------------------|---------------------------------------------------------------------------------|
 | `REPOURL`          | The SSH URL of the Git repository to monitor.                                   |
 | `REPOPATH`         | Absolute path to where the repository will be cloned locally.                   |
-| `BRANCHNAME`       | The branch name in the repository to monitor for new tags.                      |
 | `JOBFILE`          | Path to the file where processed commit information is logged.                  |
 | `TAGFILE`          | Path to the file where processed tags are stored to avoid duplicate processing. |
 | `COMMAND`          | The command to execute for each unprocessed tag (e.g., training).               |
 | `OUTFILE`          | Path to the file where the output of the `COMMAND` is logged.                   |
 
 ### Key Files
-- **`processed_tags.txt`**: Tracks which tags have already been processed. 
+- **`processed_tags.txt`**: Tracks which tags have already been processed.
 - **`training.log`**: Logs information about processed tags.
 - **`output.log`**: Captures the output of the training command.
 
@@ -63,13 +61,12 @@ Below are the key parameters and variables in the script:
 ## Installation
 
 ### 1. Update the Script Paths
-The script uses `/tmp/` directories for temporary storage. To avoid triggering unnecessary training due to `/tmp` being erased, update these paths in the [configuration variables](#configurable-variables) to a non-volatile location.
+By default, the script uses `/tmp/` for storage. Update these paths to a non-volatile directory to prevent data and state loss across reboots.
 
 ### 2. Make the Script Executable
-Ensure the script is executable by running:
+Ensure the script is executable:
 ```bash
 chmod +x /path/to/cron_start_training.sh
-```
 
 ### 3. Register script with crontab
 I suggest using crontab instead of cron for scheduling script execution. It should be already installed in the Ubuntu container.
@@ -109,3 +106,4 @@ git tag RUN001 9fceb02
 ```
 
 ### Cherry-picking commits from your branch
+TBD
