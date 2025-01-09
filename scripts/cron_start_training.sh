@@ -1,14 +1,15 @@
 #!/bin/bash
 
 # Configuration variables
-REPOURL="git@github.com:nc-fortiss/2024-nc-hackathon-AstroSpikes.git"    # SSH URL of the remote git repository
-REPOPATH="/tmp/2024-nc-hackathon-AstroSpikes"             # IMPORTANT: Must be an absolute path to the repository
-BRANCHNAME="autostart"                        # Branch name to monitor
-JOBFILE="/tmp/training.log"               # Path to store commit information
-COMMAND="echo 'THE AUTOSTART WORKS!!!'"         # Command to execute when new changes are detected
-OUTFILE="/tmp/output.log"                # Path to store COMMAND output
+REPOURL="git@github.com:nc-fortiss/2024-nc-hackathon-AstroSpikes.git"
+REPOPATH="/home/lecomte/AstroSpikes/2024-nc-hackathon-AstroSpikes"
+JOBFILE="/tmp/training.log"
+TAGFILE="/tmp/processed_tags.txt"
+COMMAND="sbatch /home/lecomte/AstroSpikes/2024-nc-hackathon-AstroSpikes/astrospikes_train.sh" # REPLACE THIS COMMAND TO START TRAINING
+OUTFILE="/tmp/output.log"
+CLONED=0
+STARTDIR=$(pwd)
 
-# Function to ensure directory exists
 ensure_dir() {
     local dir="$1"
     if [ ! -d "$dir" ]; then
@@ -17,7 +18,6 @@ ensure_dir() {
     fi
 }
 
-# Function to ensure file exists
 ensure_file() {
     local file="$1"
     if [ ! -f "$file" ]; then
@@ -27,60 +27,87 @@ ensure_file() {
     fi
 }
 
-# Step 1: Check and prepare repository
+cleanup() {
+    git switch "$STARTBRANCH"
+    cd "$STARTDIR" || exit 1
+}
+
+is_valid_tag() {
+    [[ "$1" =~ ^RUN[0-9A-Za-z_]*$ ]] || return 1
+}
+
+get_branches () {
+  git branch --remotes --format='%(refname:short)'
+}
+
+get_run_tags() {
+   git tag -l "RUN[0-9A-Za-z_]*"
+}
+
+# takes function name as argument
+# returns array of lines from command output
+
+cmd_to_array() {
+   local cmd=$1
+   tmp_arr=()
+   local tempfile="/tmp/cmd_output_$$.txt"
+   
+   $cmd | grep -v HEAD | sed 's/origin\///' | tr -d ' ' | grep -v '^$' > "$tempfile"
+   while IFS= read -r line; do
+    tmp_arr+=($line)
+   done < $tempfile
+   rm "$tempfile"
+   echo ${tmp_arr[*]}
+}
+
+
+trap cleanup EXIT INT TERM
+
+# Repository setup
 if [ ! -d "$REPOPATH" ]; then
-    # Create parent directory if it doesn't exist
     ensure_dir "$(dirname "$REPOPATH")"
-    
-    # Clone the repository
     git clone "$REPOURL" "$REPOPATH"
     if [ $? -ne 0 ]; then
         echo "Failed to clone repository"
         exit 1
     fi
+    CLONED=1
 fi
 
-# Change to repository directory
 cd "$REPOPATH" || exit 1
 
-# Step 2: Check for new commits
-# Fetch latest changes from remote
-git fetch origin "$BRANCHNAME"
+STARTBRANCH=$(git branch --show-current)
 
-# Get the latest commit hash from remote and local
-REMOTE_HASH=$(git rev-parse "origin/$BRANCHNAME")
-LOCAL_HASH=$(git rev-parse $BRANCHNAME)
+echo "Fetching latest changes"
+# Fetch all branches and tags
+git fetch --all
+git fetch --tags --all
 
-# Step 3: If there are new changes, process them
-if [ "$REMOTE_HASH" != "$LOCAL_HASH" ]; then
-    # Pull the latest changes
-    git pull origin "$BRANCHNAME"
-    
-    # Ensure JOBFILE exists
-    ensure_file "$JOBFILE"
-    
-    # Get commit information and append to JOBFILE
-    {
-        echo "---"
-        echo "Timestamp: $(date '+%Y-%m-%d %H:%M:%S')"
-        echo "Commit Hash: $REMOTE_HASH"
-        echo "Commit Message: $(git log -1 --pretty=%B)"
-        echo "Commit Date: $(git log -1 --pretty=%cd --date=format:'%Y-%m-%d %H:%M:%S')"
-        echo ""
-    } >> "$JOBFILE"
-    
-    # Ensure OUTFILE exists
-    ensure_file "$OUTFILE"
-    
-    # Execute the command and redirect output
-    {
-        echo "=== Command execution started at $(date '+%Y-%m-%d %H:%M:%S') ==="
-        eval "$COMMAND"
-        echo "=== Command execution finished at $(date '+%Y-%m-%d %H:%M:%S') ==="
-        echo ""
-    } >> "$OUTFILE" 2>&1
-    
-    echo "Changes processed successfully"
-else
-    echo "No new changes detected"
-fi
+TAGS=($(cmd_to_array get_run_tags))
+echo ${TAGS[*]}
+echo "Processing tags in branch: $BRANCH"
+for TAG in ${TAGS[*]}; do
+    if ! is_valid_tag "$TAG"; then
+        echo "Invalid tag: $TAG, skipping"
+        continue
+    fi
+    if ! grep -Fq "$TAG" "$TAGFILE"; then
+        echo "=== Processing TAG: $TAG (Branch: $BRANCH) at $(date '+%Y-%m-%d %H:%M:%S') ==="
+        
+        git checkout "$TAG"
+        
+        {
+            echo "=== Processing TAG: $TAG (Branch: $BRANCH) at $(date '+%Y-%m-%d %H:%M:%S') ==="
+            eval "$COMMAND"
+            echo "=== Finished processing TAG: $TAG (Branch: $BRANCH) at $(date '+%Y-%m-%d %H:%M:%S') ==="
+            echo ""
+        } >> "$OUTFILE" 2>&1
+        
+        echo "=== Finished processing TAG: $TAG (Branch: $BRANCH) at $(date '+%Y-%m-%d %H:%M:%S') ==="
+        echo "$TAG - $(date '+%Y-%m-%d %H:%M:%S')" >> "$TAGFILE"
+    else
+        echo "Tag $TAG already processed"
+    fi
+done
+
+cleanup
