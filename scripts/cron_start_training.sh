@@ -46,19 +46,20 @@ get_run_tags() {
 
 # takes function name as argument
 # returns array of lines from command output
+
 cmd_to_array() {
    local cmd=$1
-   local tmp_arr=()
+   tmp_arr=()
    local tempfile="/tmp/cmd_output_$$.txt"
    
    $cmd | grep -v HEAD | sed 's/origin\///' | tr -d ' ' | grep -v '^$' > "$tempfile"
    while IFS= read -r line; do
-       tmp_arr+=("$line")
-   done < "$tempfile"
+    tmp_arr+=($line)
+   done < $tempfile
    rm "$tempfile"
-   
-   echo "${tmp_arr[@]}"
+   echo ${tmp_arr[*]}
 }
+
 
 trap cleanup EXIT INT TERM
 
@@ -80,17 +81,17 @@ STARTBRANCH=$(git branch --show-current)
 echo "Fetching latest changes"
 # Fetch all branches and tags
 git fetch --all
-git fetch --tags
+git fetch --tags --all
 
 TAGS=($(cmd_to_array get_run_tags))
-
+echo ${TAGS[*]}
 echo "Processing tags in branch: $BRANCH"
-for TAG in $TAGS; do
+for TAG in ${TAGS[*]}; do
     if ! is_valid_tag "$TAG"; then
         echo "Invalid tag: $TAG, skipping"
         continue
     fi
-    if ! grep -Fxq "$TAG" "$TAGFILE"; then
+    if ! grep -Fq "$TAG" "$TAGFILE"; then
         echo "=== Processing TAG: $TAG (Branch: $BRANCH) at $(date '+%Y-%m-%d %H:%M:%S') ==="
         
         git checkout "$TAG"
