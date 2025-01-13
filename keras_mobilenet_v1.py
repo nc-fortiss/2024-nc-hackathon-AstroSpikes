@@ -8,50 +8,78 @@ import json
 import logging
 from datetime import datetime
 
-
+from omegaconf import OmegaConf
 
 logging.basicConfig(stream=sys.stderr, level=logging.INFO)
 
+import tensorflow as tf
+
 class PoseEstimationLoss(tf.keras.losses.Loss):
-    def __init__(self, lambda_pose, lambda_quat, lambda_norm, name='pose_estimation_loss'):
+    def __init__(self, initial_S=1.0, name='pose_estimation_loss'):
+        """
+        Custom Pose Estimation Loss.
+
+        Parameters:
+        - lambda_pose: Weight for pose loss (MSE of positions).
+        - lambda_quat: Weight for quaternion loss.
+        - initial_S: Initial value for the scaling factor S.
+        - name: Name of the loss function.
+        """
         super(PoseEstimationLoss, self).__init__(name=name)
-        self.lambda_pose = lambda_pose
-        self.lambda_quat = lambda_quat
-        self.lambda_norm = lambda_norm
+        # S is a trainable variable initialized with initial_S
+        self.S = tf.Variable(initial_S, trainable=True, dtype=tf.float32, name="scaling_factor_S")
         self.mse = tf.keras.losses.MeanSquaredError()
 
-    def call(self, y_true, y_pred):
-        # Split the predictions and targets into pose and quaternion parameters
-        # Extract first 3 values for the pose
-        pred_pose = y_pred[:, :3]  # First 3 values for pose
-        # Extract last 4 values for the quaternion
-        pred_quat = y_pred[:, 3:]  # Last 4 values for quaternion
-        
-        # Extract first 3 values for the pose in the target
-        target_pose = y_true[:, :3]
-        # Extract last 4 values for the quaternion in the target
+    def quanterror(self, y_true, y_pred):
+        """
+        Compute the orientation error between predicted and ground truth quaternions.
+
+        Parameters:
+        - y_true: Tensor of ground truth values (including quaternion at the last 4 values).
+        - y_pred: Tensor of predicted values (including quaternion at the last 4 values).
+
+        Returns:
+        - Orientation error in radians (as a tensor).
+        """
+        pred_quat = y_pred[:, 3:]
         target_quat = y_true[:, 3:]
-        
-        # Normalize the predicted quaternion
-        pred_quat_norm = pred_quat / tf.norm(pred_quat, axis=1, keepdims=True)
-        
-        # Pose estimation loss (Mean Squared Error)
+
+        # Normalize quaternions
+       # pred_quat = tf.nn.l2_normalize(pred_quat, axis=-1)
+       # target_quat = tf.nn.l2_normalize(target_quat, axis=-1)
+
+        # Dot product and clamp to avoid numerical instability
+        dot_product = tf.reduce_sum(pred_quat * target_quat, axis=-1)
+        dot_product = tf.clip_by_value(dot_product, -1.0, 1.0)
+
+        # Compute orientation error
+        orientation_error = 2 * tf.acos(tf.abs(dot_product))
+        return tf.reduce_mean(orientation_error)
+
+    def call(self, y_true, y_pred):
+        """
+        Compute the total loss as a weighted sum of pose loss and quaternion loss.
+
+        Parameters:
+        - y_true: Ground truth tensor [batch_size, 7].
+        - y_pred: Predicted tensor [batch_size, 7].
+
+        Returns:
+        - Total loss (scalar tensor).
+        """
+        pred_pose = y_pred[:, :3]
+        target_pose = y_true[:, :3]
+
+        # Pose loss
         pose_loss = self.mse(target_pose, pred_pose)
-        
-        # Quaternion regression loss (Mean Squared Error between normalized quaternions)
-        quat_loss = self.mse(target_quat, pred_quat_norm)
-        
-        # Quaternion normalization loss
-        quat_norm_loss = tf.reduce_mean((tf.norm(pred_quat, axis=1) - 1) ** 2)
-        
-        # Total loss with individual weights
-        total_loss = (
-            self.lambda_pose * pose_loss +
-            self.lambda_quat * quat_loss +
-            self.lambda_norm * quat_norm_loss
-        )
-        
+
+        # Quaternion orientation loss
+        quat_loss = self.quanterror(y_true, y_pred)
+
+        # Total loss with trainable S
+        total_loss = pose_loss + self.S * quat_loss
         return total_loss
+
 
 model_name = "./model_" + datetime.now().strftime("%Y%m%d_%H%M_") + ".keras"
 class CustomModel(tf.keras.Model):
@@ -90,10 +118,12 @@ class CustomModel(tf.keras.Model):
         return {m.name: m.result() for m in self.metrics}
 
 
+conf_file = "conf/global_conf.yaml"
+
 ### DEFINE MODEL
 logging.info(tf.config.list_physical_devices())
 
-base_model = MobileNet(include_top=False, alpha=0.7, input_shape=(240, 240, 3), weights=None)
+base_model = MobileNet(include_top=False, alpha=conf_file.alpha, input_shape=tuple(conf_file.input_shape), weights=None)
 # base_model.trainable = False  # Freeze all layers in the base model
 
 x = base_model.output
@@ -118,11 +148,11 @@ dataset = image_loader.ImageDataLoader(position_dir)()
 #         y_test.append(row)
 
 model_keras.compile(
-    loss=PoseEstimationLoss(1,0,0),
-    optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3),
-    metrics=['accuracy'])
+    loss=PoseEstimationLoss(),
+    optimizer=tf.keras.optimizers.Adam(learning_rate=conf_file.learning_rate),
+    metrics=conf_file.metrics)
 
-history = model_keras.fit(dataset, epochs=50, verbose=2)
+history = model_keras.fit(dataset, epochs=conf_file.epochs, verbose=conf_file.verbose)
 model_keras.save(model_name)
 def set_default(obj):
     if isinstance(obj, set):

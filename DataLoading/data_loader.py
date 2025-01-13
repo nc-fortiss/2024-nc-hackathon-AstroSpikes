@@ -175,7 +175,7 @@ if __name__ == "__main__":
     """
 
     # Load configuration file
-    config = OmegaConf.load("conf/data_loader_conf.yaml")
+    config = OmegaConf.load("conf/global_conf.yaml")
 
     # Load root directory and output directory
     dataset_dir = config.paths.dataset_dir

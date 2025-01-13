@@ -2,13 +2,20 @@ import os
 import tensorflow as tf
 import pandas as pd
 
+from omegaconf import OmegaConf
+
+from transformations import Transformations
+from filters import Filters
+
 class ImageDataLoader:
-    def __init__(self, root, batch_size=128, shuffle_count=1024, transform=None, normalize=True):
-        self.root = root
-        self.batch_size = batch_size
-        self.shuffle_count = shuffle_count
-        self.transform = transform  # Add transform parameter
-        self.normalize = normalize
+    def __init__(self):
+        # Load configuration file
+        config = OmegaConf.load("conf/global_conf.yaml")
+
+        self.root = config.paths.output_dir
+        self.batch_size = config.batch_size
+        self.shuffle_count = config.shuffle_count
+        self.normalize = True
     
     def __call__(self):
         dataset = self.load_dataset_from_directory(self.root)
@@ -22,14 +29,16 @@ class ImageDataLoader:
         if self.normalize:
             image = tf.cast(image, tf.float32) / 255.0  # Normalize to [0, 1]
 
-        # Apply the transform if provided
-        if self.transform is not None:
-            image = self.transform(image)
+        # # Apply the transform if provided
+        # if self.transform is not None:
+        #     image = self.transform(image)
 
         # Convert label to tensor
         label = tf.convert_to_tensor(label, dtype=tf.float32)
         return image, label
 
+
+    #generate a list of frame paths and corresponding labels
     def load_dataset_from_directory(self, root_directory):
         image_paths = []
         labels = []

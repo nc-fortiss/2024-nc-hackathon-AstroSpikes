@@ -1,7 +1,8 @@
 """
-Configuration file for the data loader
+Global configuration file
 """
 
+# --- Data Loader Configuration ---
 # Paths to dataset and output directories
 paths:
   dataset_dir: "/home/lecomte/AstroSpikes/SPADES" # Root directory for the dataset
@@ -22,3 +23,17 @@ filter:
 
 # Dataset type: synthetic (event-label pairs) or Real (event-only)
 dataset_type: "synthetic"
+
+# --- Image Loader Configuration ---
+batch_size: 128
+shuffle_count: 1024
+
+# --- Model Configuration ---
+alpha: 0.7
+input_shape: [240, 240, 3]
+
+# --- Training Configuration ---
+learning_rate: 1e-3
+metrics: ["accuracy"] #don't change this
+epochs: 50
+verbose: 2
