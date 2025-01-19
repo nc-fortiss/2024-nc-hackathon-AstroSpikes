@@ -34,6 +34,7 @@ input_shape: [240, 240, 3]
 
 # --- Training Configuration ---
 learning_rate: 1e-3
-metrics: ["accuracy"] #don't change this
+metrics:  #don't change this
+  - "accuracy"  
 epochs: 50
 verbose: 2

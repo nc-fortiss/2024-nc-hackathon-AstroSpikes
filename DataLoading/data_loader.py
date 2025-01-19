@@ -175,7 +175,12 @@ if __name__ == "__main__":
     """
 
     # Load configuration file
-    config = OmegaConf.load("conf/global_conf.yaml")
+    # config = OmegaConf.load("conf/global_conf.yaml")
+    try:
+        config = OmegaConf.load("conf/global_conf.yaml")
+        print(config)
+    except Exception as e:
+        print("Error loading YAML:", e)
 
     # Load root directory and output directory
     dataset_dir = config.paths.dataset_dir

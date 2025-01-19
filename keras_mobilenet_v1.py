@@ -138,10 +138,10 @@ logging.info(model_keras.summary())
 ### TRAIN MODEL
 
 #TODO: load data
-position_dir = './generating_dataset'
+position_dir = conf_file.paths.output_dir
 # position_file = 'position.csv'
 # # Load position data from CSV
-dataset = image_loader.ImageDataLoader(position_dir)()
+dataset = image_loader.ImageDataLoader()
 # with open(os.path.abspath(os.path.join(position_dir, position_file))) as file:
 #     reader = csv.reader(file)
 #     for row in reader:
