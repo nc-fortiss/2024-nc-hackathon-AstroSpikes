@@ -6,14 +6,26 @@ import logging
 import json
 from DataLoading import image_loader
 from datetime import datetime
+import wandb
+from omegaconf import OmegaConf
+import sys
+
+
+
+wandb.login(key='d8eb14aa69c0f4a4cc666324156979070f9ccb7b')
+try:
+    config = OmegaConf.load("conf/global_conf.yaml")
+    print(config)
+except Exception as e:
+    print("Error loading YAML:", e)
+
 
 
 PRETRAINED_MODEL = False
-POSITION_DIR_TRAIN = './generated_dataset/train'
-POSITION_DIR_TEST = './generated_dataset/test'
-EPOCHS = 1000
-BATCH_SIZE = 128
-
+POSITION_DIR_TRAIN = config.paths.output_dir
+POSITION_DIR_TEST = config.paths.output_dir
+EPOCHS = config.epochs
+BATCH_SIZE = config.batch_size
 
 class PoseEstimationLoss(tf.keras.losses.Loss):
     def __init__(self, lambda_pose, lambda_quat, lambda_norm, name='pose_estimation_loss'):
@@ -56,6 +68,12 @@ class PoseEstimationLoss(tf.keras.losses.Loss):
         
         return total_loss
 
+
+class WandbCallback(tf.keras.callbacks.Callback):
+    def on_train_begin(self, epoch, batch, logs=None):
+        keys = list(logs.keys())
+        wandb.log({"epoch": epoch, "batch": batch,"acc": keys['accuracy'], "loss": keys['loss']})
+
 model_name = "./model_pretrained" + datetime.now().strftime("%Y%m%d_%H%M_") + ".keras"
 logging.info("Training the model : " + model_name)
 with set_akida_version(AkidaVersion.v1):
@@ -65,11 +83,24 @@ with set_akida_version(AkidaVersion.v1):
     else:
         base_model = mobilenet.mobilenet_imagenet(input_shape=(224, 224, 3), alpha=1.0, include_top=False, input_scaling=None)
 
-    train_dataset = image_loader.ImageDataLoader(POSITION_DIR_TRAIN, transform=image_loader.ImageDataLoader.center_crop_224x224)()
-    test_dataset = image_loader.ImageDataLoader(POSITION_DIR_TEST, transform=image_loader.ImageDataLoader.center_crop_224x224)()
+    train_dataset = image_loader.ImageDataLoader(test=False) #, transform=image_loader.ImageDataLoader.center_crop_224x224)()
+    test_dataset = image_loader.ImageDataLoader(test=True) #, transform=image_loader.ImageDataLoader.center_crop_224x224)()
     # Separate layers before and after the layer to be removed
     layers_before = base_model.layers[:-2]  # Layers before the ones to remove
+    
+    logging.info("Loading dataset")
 
+    dataset = train_dataset()
+    logging.info(len(dataset))
+
+    sys.stdout.flush()
+    for d in dataset :
+        try :
+            logging.info(type(d))
+        except Exception as e:
+            logging.info(e)
+
+    sys.stdout.flush()
     model_keras = tf.keras.models.Sequential()
 
     # Add layers before the one to be removed
@@ -95,7 +126,7 @@ with set_akida_version(AkidaVersion.v1):
     layers_callback = tf.keras.callbacks.LearningRateScheduler(scheduler)
     checkpoint_callback = tf.keras.callbacks.ModelCheckpoint("/home/lecomte/AstroSpikes/2024-nc-hackathon-AstroSpikes/" + model_name,
     monitor='val_loss',
-    verbose=0,
+    verbose=config.verbose,
     save_best_only=True,
     mode='min',
     save_freq='epoch',
@@ -103,16 +134,22 @@ with set_akida_version(AkidaVersion.v1):
 )
     model_keras.load_weights("/home/lecomte/AstroSpikes/2024-nc-hackathon-AstroSpikes/model_20241203_1634_.keras")
     model_keras.compile(loss=PoseEstimationLoss(0.6,0.3, 0.1),
-                        optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3),
-                        metrics=['accuracy'])
+                        optimizer=tf.keras.optimizers.Adam(learning_rate=config.learning_rate),
+                        metrics=[config.metrics])
     
 logging.info(model_keras.summary())
 logging.info("Training model " + model_name)
 
+wandb.init(# set the wandb project where this run will be logged
+    project="mobilenet-astrospikes",
+
+    # track hyperparameters and run metadata
+    config=OmegaConf.to_container(config))
+
 ### TRAIN MODEL
 history = model_keras.fit(train_dataset, epochs=EPOCHS, batch_size=BATCH_SIZE,  \
-                          callbacks=[layers_callback, checkpoint_callback], verbose=2, shuffle=True, validation_data=test_dataset)    
-
+                          callbacks=[layers_callback, checkpoint_callback, WandbCallback], verbose=2, shuffle=True, validation_data=test_dataset)    
+wandb.finish()
 model_keras.save(model_name)
 def set_default(obj):
     if isinstance(obj, set):

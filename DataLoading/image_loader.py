@@ -3,12 +3,13 @@ import tensorflow as tf
 import pandas as pd
 
 from omegaconf import OmegaConf
+import logging
 
-from transformations import Transformations
-from filters import Filters
+#from transformations import Transformations
+#from filters import Filters
 
 class ImageDataLoader:
-    def __init__(self):
+    def __init__(self, test=False):
         # Load configuration file
         config = OmegaConf.load("conf/global_conf.yaml")
 
@@ -16,6 +17,8 @@ class ImageDataLoader:
         self.batch_size = config.batch_size
         self.shuffle_count = config.shuffle_count
         self.normalize = True
+        self.transform = self.center_crop_224x224
+        self.test = test
     
     def __call__(self):
         dataset = self.load_dataset_from_directory(self.root)
@@ -29,9 +32,9 @@ class ImageDataLoader:
         if self.normalize:
             image = tf.cast(image, tf.float32) / 255.0  # Normalize to [0, 1]
 
-        # # Apply the transform if provided
-        # if self.transform is not None:
-        #     image = self.transform(image)
+         # Apply the transform if provided
+        if self.transform is not None:
+            image = self.transform(image)
 
         # Convert label to tensor
         label = tf.convert_to_tensor(label, dtype=tf.float32)
@@ -42,8 +45,12 @@ class ImageDataLoader:
     def load_dataset_from_directory(self, root_directory):
         image_paths = []
         labels = []
+        list_dir = os.listdir(root_directory)
+        test_size = int(0.2*len(list_dir))
+        #list_dir = list_dir[:test_size] if self.test  else list_dir[test_size:]
+        logging.info(test_size)
 
-        for subdir in os.listdir(root_directory):
+        for subdir in list_dir:
             subdir_path = os.path.join(root_directory, subdir)
             
             if os.path.isdir(subdir_path):
@@ -57,8 +64,11 @@ class ImageDataLoader:
                     image_path = os.path.join(subdir_path, frame_name)
                     image_path = os.path.abspath(image_path)
                     
-                    image_paths.append(image_path)
-                    labels.append(label)
+                    if os.path.exists(image_path):
+                        image_paths.append(image_path)
+                        labels.append(label)
+                    else :
+                        print("Picture not found : " + str(image_path))
 
         image_paths = tf.constant(image_paths)
         labels = tf.constant(labels, dtype=tf.float32)

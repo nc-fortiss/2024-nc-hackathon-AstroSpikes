@@ -1,38 +1,26 @@
-"""
-Global configuration file
-"""
-
-# --- Data Loader Configuration ---
-# Paths to dataset and output directories
 paths:
-  dataset_dir: "/home/lecomte/AstroSpikes/SPADES" # Root directory for the dataset
-  output_dir: "./generated_dataset/lnes2"          # Directory where processed data will be saved
+  dataset_dir: "/home/lecomte/AstroSpikes/SPADES"
+  output_dir: "./generated_dataset/lnes"
 
-# Transformation method to process event data
 transformation:
-  method: "lnes2"  # Options: two_polarity_time_surface, two_d_histogram, lnes, lnes2, etc.
+  method: "lnes"
 
-# Filter method and parameters
 filter:
-  method: "get_distribution"       # Method to filter events
+  method: "get_distribution"
   parameters:
-    conditions:                    # Conditions for filtering [value, include/exclude]
-      - [280, false]               # Exclude values below 280
-      - [1000, true]               # Include values between 280 and 1000
-      - [1280, false]              # Exclude values above 1280
+    conditions:
+      - [280, false]
+      - [1000, true]
+      - [1280, false]
 
-# Dataset type: synthetic (event-label pairs) or Real (event-only)
 dataset_type: "synthetic"
 
-# --- Image Loader Configuration ---
 batch_size: 128
 shuffle_count: 1024
 
-# --- Model Configuration ---
 alpha: 0.7
 input_shape: [240, 240, 3]
 
-# --- Training Configuration ---
 learning_rate: 1e-3
 metrics:  #don't change this
   - "accuracy"  

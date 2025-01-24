@@ -57,7 +57,8 @@ class Transformations:
         t_positive_events = transform(events_positive)
         t_negative_events = transform(events_negative)
         ret = []
-        for frame in range(0,len(t_positive_events)):
+        
+        for frame in range(0,min(len(t_negative_events),len(t_positive_events))):
             #empty frame
             rgb_frame = np.zeros((240,240,3), dtype=np.uint8)
             #stack 3 frames into 3 channels
@@ -84,49 +85,7 @@ class Transformations:
             ret.append(rgb_frame)
         return ret
 
-
     def lnes(self, events, intervalLength=1000):
-        # Define transformation pipeline
-        transform = transforms.Compose([
-            transforms.CenterCrop(sensor_size=(1280, 720, 1), size=(720, 720)),
-            transforms.Downsample(spatial_factor=240 / 720),
-        ])
-
-        # Transform and sort events by timestamp
-        t_events = transform(events)
-        t_events = t_events[t_events['t'].argsort()]  # Sort events by time
-
-        # Initialize parameters
-        t0 = t_events[0]['t']  # First timestamp
-        ret = []
-        idx = 0
-        n_time_bins = int(t_events[-1]['t'] / intervalLength) + 1
-
-        # Process each time bin
-        for bin_idx in range(n_time_bins):
-            # Initialize an empty frame with two channels (for + and - polarities)
-            lnes_frame = np.zeros((240, 240, 3), dtype=np.uint8)
-            t_start = t0 + bin_idx * intervalLength
-            t_end = t_start + intervalLength
-
-            # Accumulate events into the LNES frame
-            while idx < len(t_events) and t_events[idx]['t'] < t_end:
-                x = t_events[idx]['x']
-                y = t_events[idx]['y']
-                p = t_events[idx]['p']  # Polarity: 0 (negative), 1 (positive)
-                t = t_events[idx]['t']
-
-                # Normalize timestamp using t_start (local time window start)
-                lnes_frame[x, y, p] = (t - t_start) / intervalLength * 255
-
-                idx += 1
-
-            # Convert to uint8
-            ret.append(lnes_frame)
-
-        return np.array(ret)
-
-    def lnes2(self, events, intervalLength=1000):
         # Define transformation pipeline
         transform = transforms.Compose([
             transforms.CenterCrop(sensor_size=(1280, 720, 1), size=(720, 720)),

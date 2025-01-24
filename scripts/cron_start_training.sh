@@ -10,6 +10,8 @@ OUTFILE="/tmp/output.log"
 CLONED=0
 STARTDIR=$(pwd)
 
+export WANDB_API_KEY=d8eb14aa69c0f4a4cc666324156979070f9ccb7b
+
 ensure_dir() {
     local dir="$1"
     if [ ! -d "$dir" ]; then

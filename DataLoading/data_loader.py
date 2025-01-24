@@ -171,7 +171,7 @@ if __name__ == "__main__":
 
     """
     DONT CHANGE ANYTHING BELOW THIS LINE!!!
-    Configurations for the data loader can be changed at conf/data_loader_conf.yaml
+    Configurations for the data loader can be changed at conf/global_conf.yaml
     """
 
     # Load configuration file
@@ -199,7 +199,6 @@ if __name__ == "__main__":
         "two_polarity_time_surface": transformation_instance.two_polarity_time_surface,
         "two_d_histogram": transformation_instance.two_d_histogram,
         "lnes": transformation_instance.lnes,
-        "lnes2": transformation_instance.lnes2,
         "to_voxel_grid": transformation_instance.to_voxel_grid,
         "three_c_representation": transformation_instance.three_c_representation,
     }
