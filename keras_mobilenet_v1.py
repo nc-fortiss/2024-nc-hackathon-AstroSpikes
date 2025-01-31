@@ -118,7 +118,11 @@ class CustomModel(tf.keras.Model):
         return {m.name: m.result() for m in self.metrics}
 
 
-conf_file = "conf/global_conf.yaml"
+try:
+    conf_file = OmegaConf.load("conf/global_conf.yaml")
+    print(conf_file)
+except Exception as e:
+    print("Error loading YAML:", e)
 
 ### DEFINE MODEL
 logging.info(tf.config.list_physical_devices())
@@ -141,7 +145,7 @@ logging.info(model_keras.summary())
 position_dir = conf_file.paths.output_dir
 # position_file = 'position.csv'
 # # Load position data from CSV
-dataset = image_loader.ImageDataLoader()
+# dataset = image_loader.ImageDataLoader()
 # with open(os.path.abspath(os.path.join(position_dir, position_file))) as file:
 #     reader = csv.reader(file)
 #     for row in reader:
@@ -151,6 +155,9 @@ model_keras.compile(
     loss=PoseEstimationLoss(),
     optimizer=tf.keras.optimizers.Adam(learning_rate=conf_file.learning_rate),
     metrics=conf_file.metrics)
+
+dataset_loader = image_loader.ImageDataLoader(test=False)  # Initialize the loader
+dataset = dataset_loader()  # Call it to get the actual tf.data.Dataset
 
 history = model_keras.fit(dataset, epochs=conf_file.epochs, verbose=conf_file.verbose)
 model_keras.save(model_name)

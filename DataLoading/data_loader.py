@@ -184,7 +184,7 @@ if __name__ == "__main__":
 
     # Load root directory and output directory
     dataset_dir = config.paths.dataset_dir
-    output_dir = config.paths.output_dir
+    output_dir = config.paths.output_dir + '/' + config.transformation.method
     os.makedirs(output_dir, exist_ok=True)
 
     print(f"Dataset directory: {dataset_dir}")

@@ -1,6 +1,6 @@
 paths:
   dataset_dir: "/home/lecomte/AstroSpikes/SPADES"
-  output_dir: "./generated_dataset/lnes"
+  output_dir: "./generated_dataset"
 
 transformation:
   method: "lnes"

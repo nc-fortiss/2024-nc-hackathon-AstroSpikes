@@ -13,11 +13,11 @@ class ImageDataLoader:
         # Load configuration file
         config = OmegaConf.load("conf/global_conf.yaml")
 
-        self.root = config.paths.output_dir
+        self.root = config.paths.output_dir + '/' + config.transformation.method
         self.batch_size = config.batch_size
         self.shuffle_count = config.shuffle_count
         self.normalize = True
-        self.transform = self.center_crop_224x224
+        self.transform = self.center_crop_240x240
         self.test = test
     
     def __call__(self):
@@ -86,8 +86,8 @@ class ImageDataLoader:
         return dirname + '.csv'
 
     @staticmethod
-    def center_crop_224x224(image):
+    def center_crop_240x240(image):
         """
-        Center crops the image to 224x224.
+        Center crops the image to 240x240.
         """
-        return tf.image.resize_with_crop_or_pad(image, target_height=224, target_width=224)
+        return tf.image.resize_with_crop_or_pad(image, target_height=240, target_width=240)
