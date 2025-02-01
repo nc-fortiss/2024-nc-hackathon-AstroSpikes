@@ -17,6 +17,7 @@ dataset_type: "synthetic"
 
 batch_size: 128
 shuffle_count: 1024
+test_split: 0.2
 
 alpha: 0.7
 input_shape: [240, 240, 3]

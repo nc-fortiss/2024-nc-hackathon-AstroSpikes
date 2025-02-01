@@ -11,19 +11,30 @@ import logging
 class ImageDataLoader:
     def __init__(self, test=False):
         # Load configuration file
-        config = OmegaConf.load("conf/global_conf.yaml")
+        self.config = OmegaConf.load("conf/global_conf.yaml")
 
-        self.root = config.paths.output_dir + '/' + config.transformation.method
-        self.batch_size = config.batch_size
-        self.shuffle_count = config.shuffle_count
+        self.root = self.config.paths.output_dir + '/' + self.config.transformation.method
+        self.batch_size = self.config.batch_size
+        self.shuffle_count = self.config.shuffle_count
         self.normalize = True
         self.transform = self.center_crop_240x240
         self.test = test
     
     def __call__(self):
         dataset = self.load_dataset_from_directory(self.root)
-        dataset = dataset.shuffle(self.shuffle_count).batch(self.batch_size).prefetch(tf.data.AUTOTUNE)
-        return dataset
+        train, test = self.split_dataset(dataset)
+        train = train.shuffle(self.shuffle_count).batch(self.batch_size).prefetch(tf.data.AUTOTUNE)
+        test = test.shuffle(self.shuffle_count).batch(self.batch_size).prefetch(tf.data.AUTOTUNE)
+        return train, test
+
+    def split_dataset(self, dataset):
+        dataset_size = dataset.cardinality().numpy()
+        test_size = int(self.config.test_split * dataset_size)
+
+        test_dataset = dataset.take(test_size)
+        train_dataset = dataset.skip(test_size)
+
+        return train_dataset, test_dataset
 
     def load_image_and_label(self, image_path, label):
         # Load the image

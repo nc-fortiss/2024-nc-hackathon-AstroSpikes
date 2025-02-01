@@ -156,10 +156,10 @@ model_keras.compile(
     optimizer=tf.keras.optimizers.Adam(learning_rate=conf_file.learning_rate),
     metrics=conf_file.metrics)
 
-dataset_loader = image_loader.ImageDataLoader(test=False)  # Initialize the loader
-dataset = dataset_loader()  # Call it to get the actual tf.data.Dataset
+dataset_loader = image_loader.ImageDataLoader(test=True)  # Initialize the loader
+train, test = dataset_loader()  # Call it to get the actual tf.data.Dataset
 
-history = model_keras.fit(dataset, epochs=conf_file.epochs, verbose=conf_file.verbose)
+history = model_keras.fit(train, validation_data=test, epochs=conf_file.epochs, verbose=conf_file.verbose)
 model_keras.save(model_name)
 def set_default(obj):
     if isinstance(obj, set):

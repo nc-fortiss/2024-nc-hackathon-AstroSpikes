@@ -83,8 +83,12 @@ with set_akida_version(AkidaVersion.v1):
     else:
         base_model = mobilenet.mobilenet_imagenet(input_shape=(224, 224, 3), alpha=1.0, include_top=False, input_scaling=None)
 
-    train_dataset = image_loader.ImageDataLoader(test=False) #, transform=image_loader.ImageDataLoader.center_crop_224x224)()
-    test_dataset = image_loader.ImageDataLoader(test=True) #, transform=image_loader.ImageDataLoader.center_crop_224x224)()
+    # Load the dataset
+    data_loader = image_loader.ImageDataLoader(test=True)
+    train_dataset, test_dataset = data_loader()
+
+    # train_dataset = image_loader.ImageDataLoader(test=False) #, transform=image_loader.ImageDataLoader.center_crop_224x224)()
+    # test_dataset = image_loader.ImageDataLoader(test=True) #, transform=image_loader.ImageDataLoader.center_crop_224x224)()
     # Separate layers before and after the layer to be removed
     layers_before = base_model.layers[:-2]  # Layers before the ones to remove
     
