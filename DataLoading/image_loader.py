@@ -57,14 +57,13 @@ class ImageDataLoader:
         image_paths = []
         labels = []
         list_dir = os.listdir(root_directory)
-        test_size = int(0.2*len(list_dir))
-        #list_dir = list_dir[:test_size] if self.test  else list_dir[test_size:]
-        logging.info(test_size)
 
         for subdir in list_dir:
+            
             subdir_path = os.path.join(root_directory, subdir)
             
             if os.path.isdir(subdir_path):
+
                 label_csv_path = os.path.join(subdir_path, self._get_csv_filename(subdir))
                 label_df = pd.read_csv(label_csv_path, header=None, skiprows=1)
                 
@@ -101,4 +100,4 @@ class ImageDataLoader:
         """
         Center crops the image to 240x240.
         """
-        return tf.image.resize_with_crop_or_pad(image, target_height=240, target_width=240)
+        return tf.image.resize_with_crop_or_pad(image, target_height=224, target_width=224)

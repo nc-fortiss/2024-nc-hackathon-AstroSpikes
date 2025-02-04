@@ -11,6 +11,7 @@ from omegaconf import OmegaConf
 import sys
 
 
+log_wandb = True
 
 wandb.login(key='d8eb14aa69c0f4a4cc666324156979070f9ccb7b')
 try:
@@ -70,12 +71,16 @@ class PoseEstimationLoss(tf.keras.losses.Loss):
 
 
 class WandbCallback(tf.keras.callbacks.Callback):
-    def on_train_begin(self, epoch, batch, logs=None):
-        keys = list(logs.keys())
-        wandb.log({"epoch": epoch, "batch": batch,"acc": keys['accuracy'], "loss": keys['loss']})
+    def on_epoch_begin(self, epochs, logs=None):
+        dict_keys = logs.keys()
+        keys = list(dict_keys)
+        logging.info("...Training: start of batch {}; got log keys: {}".format("0", keys))
+        wandb.log({"epoch": "a2","acc": 1, "loss": 1})
 
 model_name = "./model_pretrained" + datetime.now().strftime("%Y%m%d_%H%M_") + ".keras"
+
 logging.info("Training the model : " + model_name)
+
 with set_akida_version(AkidaVersion.v1):
     if PRETRAINED_MODEL:
         base_model = mobilenet.mobilenet_imagenet_pretrained(alpha=1.0, quantized=False)
@@ -93,17 +98,6 @@ with set_akida_version(AkidaVersion.v1):
     layers_before = base_model.layers[:-2]  # Layers before the ones to remove
     
     logging.info("Loading dataset")
-
-    dataset = train_dataset()
-    logging.info(len(dataset))
-
-    sys.stdout.flush()
-    for d in dataset :
-        try :
-            logging.info(type(d))
-        except Exception as e:
-            logging.info(e)
-
     sys.stdout.flush()
     model_keras = tf.keras.models.Sequential()
 
@@ -139,21 +133,27 @@ with set_akida_version(AkidaVersion.v1):
     model_keras.load_weights("/home/lecomte/AstroSpikes/2024-nc-hackathon-AstroSpikes/model_20241203_1634_.keras")
     model_keras.compile(loss=PoseEstimationLoss(0.6,0.3, 0.1),
                         optimizer=tf.keras.optimizers.Adam(learning_rate=config.learning_rate),
-                        metrics=[config.metrics])
+                        metrics=[config.metrics[0]])
     
 logging.info(model_keras.summary())
 logging.info("Training model " + model_name)
 
-wandb.init(# set the wandb project where this run will be logged
-    project="mobilenet-astrospikes",
+if log_wandb:
+    wandb.init(# set the wandb project where this run will be logged
+        project="mobilenet-astrospikes",
 
-    # track hyperparameters and run metadata
-    config=OmegaConf.to_container(config))
+        # track hyperparameters and run metadata
+        config=OmegaConf.to_container(config))
+
+callbacks = [layers_callback, checkpoint_callback, WandbCallback()] if  log_wandb else [layers_callback, checkpoint_callback] 
 
 ### TRAIN MODEL
 history = model_keras.fit(train_dataset, epochs=EPOCHS, batch_size=BATCH_SIZE,  \
-                          callbacks=[layers_callback, checkpoint_callback, WandbCallback], verbose=2, shuffle=True, validation_data=test_dataset)    
-wandb.finish()
+                          callbacks=callbacks, verbose=2, shuffle=True, validation_data=test_dataset)    
+
+if log_wandb :
+    wandb.finish()
+
 model_keras.save(model_name)
 def set_default(obj):
     if isinstance(obj, set):
