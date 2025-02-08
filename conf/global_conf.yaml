@@ -3,7 +3,7 @@ paths:
   output_dir: "./generated_dataset"
 
 transformation:
-  method: "two_polarity_time_surface"
+  method: "two_d_histogram"
 
 filter:
   method: "get_distribution"
