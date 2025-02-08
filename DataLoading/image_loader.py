@@ -9,15 +9,15 @@ import logging
 #from filters import Filters
 
 class ImageDataLoader:
-    def __init__(self, test=False):
+    def __init__(self, test=False, config_path="conf/global_conf.yaml"):
         # Load configuration file
-        self.config = OmegaConf.load("conf/global_conf.yaml")
+        self.config = OmegaConf.load(config_path)
 
         self.root = self.config.paths.output_dir + '/' + self.config.transformation.method
         self.batch_size = self.config.batch_size
         self.shuffle_count = self.config.shuffle_count
         self.normalize = True
-        self.transform = self.center_crop_240x240
+        self.transform = self.center_crop
         self.test = test
     
     def __call__(self):
@@ -95,9 +95,8 @@ class ImageDataLoader:
     def _get_csv_filename(self, dirname: str) -> str:
         return dirname + '.csv'
 
-    @staticmethod
-    def center_crop_240x240(image):
+    def center_crop(self, image):
         """
-        Center crops the image to 240x240.
+        Center crops the image as configured in conf/global_conf.yaml.
         """
-        return tf.image.resize_with_crop_or_pad(image, target_height=224, target_width=224)
+        return tf.image.resize_with_crop_or_pad(image, target_height=self.config.input_shape[0], target_width=self.config.input_shape[1])

@@ -20,7 +20,7 @@ shuffle_count: 1024
 test_split: 0.2
 
 alpha: 0.7
-input_shape: [240, 240, 3]
+input_shape: [224, 224, 3]
 
 learning_rate: 1e-3
 metrics:  #don't change this

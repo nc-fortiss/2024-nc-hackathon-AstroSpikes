@@ -13,6 +13,7 @@ from omegaconf import OmegaConf
 from transformations import Transformations
 from filters import Filters
 
+
 class SamplesDataLoader(tonic.Dataset):
     def __init__(self, dataset_dir, dataset_type="synthetic", transform=None, filter=None):
         """
@@ -41,13 +42,14 @@ class SamplesDataLoader(tonic.Dataset):
         if self.dataset_type == "synthetic":
             labels_dir = os.path.join(self.dataset_dir, self.dataset_type, "labels")
             for file_name in sorted(os.listdir(events_dir)):
-                if file_name.endswith(".csv"):
+
+                if file_name.endswith(".csv") and file_name[0].isalpha():
                     event_file = os.path.join(events_dir, file_name)
                     label_file = os.path.join(labels_dir, file_name)
                     samples.append((event_file, label_file))
         elif self.dataset_type == "Real":
             for file_name in sorted(os.listdir(events_dir)):
-                if file_name.endswith(".csv"):
+                if file_name.endswith(".csv") and file_name[0].isalpha():
                     event_file = os.path.join(events_dir, file_name)
                     samples.append((event_file, None))
         return samples
@@ -66,7 +68,7 @@ class SamplesDataLoader(tonic.Dataset):
         dtype = [('t', 'float64'), ('x', 'int32'), ('y', 'int32'), ('p', 'int32')]
 
         # Load CSV data without a header and assign column names directly
-        events_df = pd.read_csv(file_path, header=None, names=['t', 'x', 'y', 'p'])
+        events_df = pd.read_csv(file_path, header=None, names=['t', 'x', 'y', 'p'], on_bad_lines='skip')
 
         # Convert the DataFrame to a structured array with the specified dtype
         events = np.array([tuple(row) for row in events_df.to_numpy()], dtype=dtype)
