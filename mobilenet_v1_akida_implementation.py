@@ -29,11 +29,9 @@ EPOCHS = config.epochs
 BATCH_SIZE = config.batch_size
 
 class PoseEstimationLoss(tf.keras.losses.Loss):
-    def __init__(self, lambda_pose, lambda_quat, lambda_norm, name='pose_estimation_loss'):
+    def __init__(self, beta, name='pose_estimation_loss'):
         super(PoseEstimationLoss, self).__init__(name=name)
-        self.lambda_pose = lambda_pose
-        self.lambda_quat = lambda_quat
-        self.lambda_norm = lambda_norm
+        self.beta = beta  # Beta is now a fixed scaling factor for each run
         self.mse = tf.keras.losses.MeanSquaredError()
 
     def call(self, y_true, y_pred):
@@ -43,30 +41,21 @@ class PoseEstimationLoss(tf.keras.losses.Loss):
         # Extract last 4 values for the quaternion
         pred_quat = y_pred[:, 3:]  # Last 4 values for quaternion
         
-        # Extract first 3 values for the pose in the target
         target_pose = y_true[:, :3]
-        # Extract last 4 values for the quaternion in the target
         target_quat = y_true[:, 3:]
-        
+
         # Normalize the predicted quaternion
         pred_quat_norm = pred_quat / tf.norm(pred_quat, axis=1, keepdims=True)
-        
-        # Pose estimation loss (Mean Squared Error)
+
+        # Compute position loss (MSE)
         pose_loss = self.mse(target_pose, pred_pose)
-        
-        # Quaternion regression loss (Mean Squared Error between normalized quaternions)
+
+        # Compute orientation loss (Quaternion MSE)
         quat_loss = self.mse(target_quat, pred_quat_norm)
-        
-        # Quaternion normalization loss
-        quat_norm_loss = tf.reduce_mean((tf.norm(pred_quat, axis=1) - 1) ** 2)
-        
-        # Total loss with individual weights
-        total_loss = (
-            self.lambda_pose * pose_loss +
-            self.lambda_quat * quat_loss +
-            self.lambda_norm * quat_norm_loss
-        )
-        
+
+        # Total loss as a linear combination of the two losses with scaling factor beta
+        total_loss = pose_loss + self.beta * quat_loss
+
         return total_loss
 
 
@@ -131,7 +120,7 @@ with set_akida_version(AkidaVersion.v1):
     initial_value_threshold=None
 )
     model_keras.load_weights("/home/lecomte/AstroSpikes/2024-nc-hackathon-AstroSpikes/model_20241203_1634_.keras")
-    model_keras.compile(loss=PoseEstimationLoss(0.6,0.3, 0.1),
+    model_keras.compile(loss=PoseEstimationLoss(beta = 5),
                         optimizer=tf.keras.optimizers.Adam(learning_rate=config.learning_rate),
                         metrics=[config.metrics[0]])
     
@@ -147,14 +136,52 @@ if log_wandb:
 
 callbacks = [layers_callback, checkpoint_callback, WandbCallback()] if  log_wandb else [layers_callback, checkpoint_callback] 
 
-### TRAIN MODEL
-history = model_keras.fit(train_dataset, epochs=EPOCHS, batch_size=BATCH_SIZE,  \
-                          callbacks=callbacks, verbose=2, shuffle=True, validation_data=test_dataset)    
+### TRAINING LOOP TO FIND BEST BETA VALUE
+
+beta_values = [5,10,15,20,25,30]
+best_beta = None
+lowest_val_loss = float('inf')
+
+for beta in beta_values:
+    logging.info(f"Training with beta = {beta}")
+
+    # Use the loss function with the current beta value
+    loss = PoseEstimationLoss(beta=beta)
+    model_keras.compile(loss=loss_function,
+                        optimizer=tf.keras.optimizers.Adam(learning_rate=config.learning_rate),
+                        metrics=[config.metrics[0]])
+    
+    # Train the model
+    history = model_keras.fit(train_dataset, epochs=EPOCHS, batch_size=BATCH_SIZE,
+                              callbacks=callbacks, verbose=2, shuffle=True, validation_data=test_dataset)
+
+    # Update the best beta value and val loss if needed
+    val_loss = min(history.history["val_loss"])
+    logging.info(f"Beta = {beta}, Best Validation Loss = {val_loss}")
+    if val_loss < lowest_val_loss:
+        lowest_val_loss = val_loss
+        best_beta = beta
+
+logging.info(f"Best beta found: {best_beta} with validation loss {lowest_val_loss}")
+
+# Train the model with the best beta value
+loss = PoseEstimationLoss(beta=best_beta)
+model_keras.compile(loss=loss_function,
+                    optimizer=tf.keras.optimizers.Adam(learning_rate=config.learning_rate),
+                    metrics=[config.metrics[0]])
+
+history = model_keras.fit(train_dataset, epochs=EPOCHS, batch_size=BATCH_SIZE,
+                          callbacks=callbacks, verbose=2, shuffle=True, validation_data=test_dataset)
+
+# Log the final model training to WandB
+wandb.log({"final_best_beta": best_beta, "final_val_loss": min(history.history["val_loss"])})
 
 if log_wandb :
     wandb.finish()
 
+# Save the final best model
 model_keras.save(model_name)
+
 def set_default(obj):
     if isinstance(obj, set):
         return list(obj)
