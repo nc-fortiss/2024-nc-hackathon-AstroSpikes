@@ -141,7 +141,8 @@ logging.info("Training model " + model_name)
 if log_wandb:
     wandb.init(# set the wandb project where this run will be logged
         project="mobilenet-astrospikes",
-
+        #set the transformation
+        notes = str(config.transformation.method),
         # track hyperparameters and run metadata
         config=OmegaConf.to_container(config))
 
