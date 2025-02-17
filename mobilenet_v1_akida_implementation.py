@@ -64,17 +64,14 @@ class WandbCallback(tf.keras.callbacks.Callback):
         dict_keys = logs.keys()
         keys = list(dict_keys)
         logging.info("...Training: start of batch {}; got log keys: {}".format("0", keys))
-        wandb.log({"mae": logs['mean_absolute_error'], 
-                   "loss": logs['loss']})
+        wandb.log({"loss": logs['loss']})
     
-    def on_train_epoch_end(self, epochs, logs=None):
+    def on_val_epoch_end(self, epochs, logs=None):
         dict_keys = logs.keys()
         keys = list(dict_keys)
         logging.info("...Training: start of epoch {}; got log keys: {}".format(epochs, keys))
-        wandb.log({"mae": logs['mean_absolute_error'], 
-                   "loss": logs['loss'],
-                   "val_mae": logs['val_loss'], 
-                   "val_loss": logs['val_mean_absolute_error']})
+        wandb.log({"val_mae": logs['val_loss'], 
+                   "val_loss": logs['val_'+config.metrics[0]]})
 
 model_name = "./model_pretrained" + datetime.now().strftime("%Y%m%d_%H%M_") + ".keras"
 
@@ -129,10 +126,11 @@ with set_akida_version(AkidaVersion.v1):
     save_freq='epoch',
     initial_value_threshold=None
 )
-    model_keras.load_weights("/home/lecomte/AstroSpikes/2024-nc-hackathon-AstroSpikes/model_20241203_1634_.keras")
+    if PRETRAINED_MODEL:
+        model_keras.load_weights("/home/lecomte/AstroSpikes/2024-nc-hackathon-AstroSpikes/model_20241203_1634_.keras")
     model_keras.compile(loss=PoseEstimationLoss(beta = 5),
                         optimizer=tf.keras.optimizers.Adam(learning_rate=config.learning_rate),
-                        metrics=['mean_absolute_error'])
+                        metrics=[config.metrics[0]])
     
 logging.info(model_keras.summary())
 logging.info("Training model " + model_name)
@@ -157,7 +155,7 @@ for beta in beta_values:
 
     # Use the loss function with the current beta value
     loss = PoseEstimationLoss(beta=beta)
-    model_keras.compile(loss=loss_function,
+    model_keras.compile(loss=loss,
                         optimizer=tf.keras.optimizers.Adam(learning_rate=config.learning_rate),
                         metrics=[config.metrics[0]])
     
@@ -176,17 +174,16 @@ logging.info(f"Best beta found: {best_beta} with validation loss {lowest_val_los
 
 # Train the model with the best beta value
 loss = PoseEstimationLoss(beta=best_beta)
-model_keras.compile(loss=loss_function,
+model_keras.compile(loss=loss,
                     optimizer=tf.keras.optimizers.Adam(learning_rate=config.learning_rate),
                     metrics=[config.metrics[0]])
 
 history = model_keras.fit(train_dataset, epochs=EPOCHS, batch_size=BATCH_SIZE,
                           callbacks=callbacks, verbose=2, shuffle=True, validation_data=test_dataset)
 
-# Log the final model training to WandB
-wandb.log({"final_best_beta": best_beta, "final_val_loss": min(history.history["val_loss"])})
-
 if log_wandb :
+    # Log the final model training to WandB
+    wandb.log({"final_best_beta": best_beta, "final_val_loss": min(history.history["val_loss"])})
     wandb.finish()
 
 # Save the final best model

@@ -5,3 +5,6 @@ data
 *.sif
 visualizations/*.png
 *__pycache__*
+*wandb*
+*generated_dataset*
+*frames*
