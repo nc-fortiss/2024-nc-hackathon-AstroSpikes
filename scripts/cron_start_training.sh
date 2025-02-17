@@ -3,10 +3,10 @@
 # Configuration variables
 REPOURL="git@github.com:nc-fortiss/2024-nc-hackathon-AstroSpikes.git"
 REPOPATH="/home/lecomte/AstroSpikes/2024-nc-hackathon-AstroSpikes"
-JOBFILE="/tmp/training.log"
-TAGFILE="/tmp/processed_tags.txt"
+JOBFILE="/home/lecomte/AstroSpikes/training.log"
+TAGFILE="/home/lecomte/AstroSpikes/processed_tags.txt"
 COMMAND="sbatch /home/lecomte/AstroSpikes/2024-nc-hackathon-AstroSpikes/astrospikes_train.sh" # REPLACE THIS COMMAND TO START TRAINING
-OUTFILE="/tmp/output.log"
+OUTFILE="/home/lecomte/AstroSpikes/output.log"
 CLONED=0
 STARTDIR=$(pwd)
 

@@ -60,11 +60,21 @@ class PoseEstimationLoss(tf.keras.losses.Loss):
 
 
 class WandbCallback(tf.keras.callbacks.Callback):
-    def on_epoch_begin(self, epochs, logs=None):
+    def on_train_batch_end(self, epochs, logs=None):
         dict_keys = logs.keys()
         keys = list(dict_keys)
         logging.info("...Training: start of batch {}; got log keys: {}".format("0", keys))
-        wandb.log({"epoch": "a2","acc": 1, "loss": 1})
+        wandb.log({"mae": logs['mean_absolute_error'], 
+                   "loss": logs['loss']})
+    
+    def on_train_epoch_end(self, epochs, logs=None):
+        dict_keys = logs.keys()
+        keys = list(dict_keys)
+        logging.info("...Training: start of epoch {}; got log keys: {}".format(epochs, keys))
+        wandb.log({"mae": logs['mean_absolute_error'], 
+                   "loss": logs['loss'],
+                   "val_mae": logs['val_loss'], 
+                   "val_loss": logs['val_mean_absolute_error']})
 
 model_name = "./model_pretrained" + datetime.now().strftime("%Y%m%d_%H%M_") + ".keras"
 
@@ -122,7 +132,7 @@ with set_akida_version(AkidaVersion.v1):
     model_keras.load_weights("/home/lecomte/AstroSpikes/2024-nc-hackathon-AstroSpikes/model_20241203_1634_.keras")
     model_keras.compile(loss=PoseEstimationLoss(beta = 5),
                         optimizer=tf.keras.optimizers.Adam(learning_rate=config.learning_rate),
-                        metrics=[config.metrics[0]])
+                        metrics=['mean_absolute_error'])
     
 logging.info(model_keras.summary())
 logging.info("Training model " + model_name)
