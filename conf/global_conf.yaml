@@ -3,7 +3,7 @@ paths:
   output_dir: "./generated_dataset"
 
 transformation:
-  method: "lnes"
+  method: "three_c_representation"
 
 filter:
   method: "get_distribution"
