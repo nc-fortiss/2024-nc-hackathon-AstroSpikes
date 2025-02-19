@@ -147,7 +147,7 @@ lowest_val_loss = float('inf')
 for beta in beta_values:
     if log_wandb:
         wandb.init(# set the wandb project where this run will be logged
-        project="mobilenet-astrospikes"str(beta),
+        project="mobilenet-astrospikes",
         name=config.transformation.method+"_beta_"+str(beta),
         # track hyperparameters and run metadata
         config=OmegaConf.to_container(config))
