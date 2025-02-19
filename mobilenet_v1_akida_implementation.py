@@ -179,7 +179,7 @@ model_keras.compile(loss=loss,
                     metrics=[config.metrics[0]])
 if log_wandb:
     wandb.init(# set the wandb project where this run will be logged
-    project="mobilenet-astrospikes"str(beta),
+    project="mobilenet-astrospikes",
     name=config.transformation.method+"_final",
     # track hyperparameters and run metadata
     config=OmegaConf.to_container(config))

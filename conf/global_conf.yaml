@@ -3,7 +3,7 @@ paths:
   output_dir: "./generated_dataset"
 
 transformation:
-  method: "three_c_representation"
+  method: "two_polarity_time_surface"
 
 filter:
   method: "get_distribution"
