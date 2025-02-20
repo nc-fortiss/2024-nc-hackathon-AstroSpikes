@@ -1,6 +1,7 @@
 import os
 import tensorflow as tf
 import pandas as pd
+import numpy as np
 
 from omegaconf import OmegaConf
 import logging
@@ -15,16 +16,25 @@ class ImageDataLoader:
 
         self.root = self.config.paths.output_dir + '/' + self.config.transformation.method
         self.batch_size = self.config.batch_size
-        self.shuffle_count = self.config.shuffle_count
         self.normalize = True
         self.transform = self.center_crop
         self.test = test
     
     def __call__(self):
         dataset = self.load_dataset_from_directory(self.root)
+        dataset_size = dataset.cardinality().numpy()
+        #shuffling the whole dataset with max buffer size
+        dataset = dataset.shuffle(buffer_size=dataset_size, seed=42)
+
+        # Split the dataset into train and test
         train, test = self.split_dataset(dataset)
-        train = train.shuffle(self.shuffle_count).batch(self.batch_size).prefetch(tf.data.AUTOTUNE)
-        test = test.shuffle(self.shuffle_count).batch(self.batch_size).prefetch(tf.data.AUTOTUNE)
+
+        # Shuffle only the training dataset
+        train_size = train.cardinality().numpy()
+        train = train.shuffle(buffer_size=train_size, seed=42).batch(self.batch_size).prefetch(tf.data.AUTOTUNE)
+
+        # Batch the test dataset
+        test = test.batch(self.batch_size).prefetch(tf.data.AUTOTUNE)
         return train, test
 
     def split_dataset(self, dataset):
@@ -43,7 +53,7 @@ class ImageDataLoader:
         if self.normalize:
             image = tf.cast(image, tf.float32) / 255.0  # Normalize to [0, 1]
 
-         # Apply the transform if provided
+        # Apply the transform if provided
         if self.transform is not None:
             image = self.transform(image)
 
