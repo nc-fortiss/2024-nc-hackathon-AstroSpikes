@@ -112,4 +112,4 @@ for TAG in ${TAGS[*]}; do
     fi
 done
 
-cleanup
+#cleanup
