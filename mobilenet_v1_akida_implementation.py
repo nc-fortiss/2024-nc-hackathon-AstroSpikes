@@ -34,6 +34,9 @@ class PoseEstimationLoss(tf.keras.losses.Loss):
         self.beta = beta  # Beta is now a fixed scaling factor for each run
         self.mse = tf.keras.losses.MeanSquaredError()
 
+        self.pose_loss = None
+        self.quat_loss = None
+
     def call(self, y_true, y_pred):
         # Split the predictions and targets into pose and quaternion parameters
         # Extract first 3 values for the pose
@@ -48,33 +51,71 @@ class PoseEstimationLoss(tf.keras.losses.Loss):
         pred_quat_norm = pred_quat / tf.norm(pred_quat, axis=1, keepdims=True)
 
         # Compute position loss (MSE)
-        pose_loss = self.mse(target_pose, pred_pose)
+        self.pose_loss = self.mse(target_pose, pred_pose)
 
         # Compute orientation loss (Quaternion MSE)
-        quat_loss = self.mse(target_quat, pred_quat_norm)
+        self.quat_loss = self.mse(target_quat, pred_quat_norm)
 
         # Total loss as a linear combination of the two losses with scaling factor beta
-        total_loss = pose_loss + self.beta * quat_loss
+        total_loss = self.pose_loss + self.beta * self.quat_loss
 
         return total_loss
 
 
 class WandbCallback(tf.keras.callbacks.Callback):
-    def on_train_batch_end(self, epochs, logs=None):
+    def on_train_batch_end(self, batch, logs=None):
         dict_keys = logs.keys()
         keys = list(dict_keys)
-        logging.info("...Training: start of batch {}; got log keys: {}".format("0", keys))
-        wandb.log({"mae": logs['mean_absolute_error'], 
-                   "loss": logs['loss']})
-    
-    def on_train_epoch_end(self, epochs, logs=None):
+        logging.info("...Training: end of batch {}; got log keys: {}".format(batch, keys))
+
+        loss_fn = self.model.loss
+        
+        if isinstance(loss_fn, PoseEstimationLoss):
+            pose_loss = loss_fn.pose_loss
+            quat_loss = loss_fn.quat_loss
+
+            if quat_loss is not None and tf.reduce_mean(quat_loss).numpy() != 0:
+                beta_ratio = tf.reduce_mean(pose_loss).numpy() / tf.reduce_mean(quat_loss).numpy()
+            else:
+                beta_ratio = 0
+
+            wandb.log({
+                "train_pose_loss": tf.reduce_mean(pose_loss).numpy(),
+                "train_quat_loss": tf.reduce_mean(quat_loss).numpy(),
+                "train_beta_ratio": beta_ratio,
+                "train_mae": logs['mean_absolute_error'], 
+                "train_loss": logs['loss']
+            })
+
+            loss_fn.pose_loss = None
+            loss_fn.quat_loss = None
+
+    def on_epoch_end(self, epoch, logs=None):
         dict_keys = logs.keys()
         keys = list(dict_keys)
-        logging.info("...Training: start of epoch {}; got log keys: {}".format(epochs, keys))
-        wandb.log({"mae": logs['mean_absolute_error'], 
-                   "loss": logs['loss'],
-                   "val_mae": logs['val_loss'], 
-                   "val_loss": logs['val_mean_absolute_error']})
+        logging.info("...Training: start of epoch {}; got log keys: {}".format(epoch, keys))
+
+        loss_fn = self.model.loss
+        
+        if isinstance(loss_fn, PoseEstimationLoss):
+            pose_loss = loss_fn.pose_loss
+            quat_loss = loss_fn.quat_loss
+            
+            if quat_loss is not None and tf.reduce_mean(quat_loss).numpy() != 0:
+                beta_ratio = tf.reduce_mean(pose_loss).numpy() / tf.reduce_mean(quat_loss).numpy()
+            else:
+                beta_ratio = 0
+
+            wandb.log({
+                "val_pose_loss": tf.reduce_mean(pose_loss).numpy(),
+                "val_quat_loss": tf.reduce_mean(quat_loss).numpy(),
+                "val_beta_ratio": beta_ratio,
+                "val_mae": logs['val_mean_absolute_error'],
+                "val_loss": logs['val_loss']
+            })
+
+            loss_fn.pose_loss = None
+            loss_fn.quat_loss = None
 
 model_name = "./model_pretrained" + datetime.now().strftime("%Y%m%d_%H%M_") + ".keras"
 logging.info("Training the model : " + model_name)
