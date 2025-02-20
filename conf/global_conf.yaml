@@ -3,7 +3,7 @@ paths:
   output_dir: "./generated_dataset"
 
 transformation:
-  method: "lnes"
+  method: "to_voxel_grid"
 
 filter:
   method: "get_distribution"
@@ -25,5 +25,5 @@ input_shape: [224, 224, 3]
 learning_rate: 1e-3
 metrics:  #don't change this
   - "mean_absolute_error"  
-epochs: 50
+epochs: 10
 verbose: 2

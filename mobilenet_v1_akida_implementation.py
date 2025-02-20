@@ -74,7 +74,6 @@ class WandbCallback(tf.keras.callbacks.Callback):
                    "val_loss": logs['val_'+config.metrics[0]]})
 
 model_name = "./model_pretrained" + datetime.now().strftime("%Y%m%d_%H%M_") + ".keras"
-
 logging.info("Training the model : " + model_name)
 
 with set_akida_version(AkidaVersion.v1):
@@ -135,13 +134,6 @@ with set_akida_version(AkidaVersion.v1):
 logging.info(model_keras.summary())
 logging.info("Training model " + model_name)
 
-if log_wandb:
-    wandb.init(# set the wandb project where this run will be logged
-        project="mobilenet-astrospikes",
-
-        # track hyperparameters and run metadata
-        config=OmegaConf.to_container(config))
-
 callbacks = [layers_callback, checkpoint_callback, WandbCallback()] if  log_wandb else [layers_callback, checkpoint_callback] 
 
 ### TRAINING LOOP TO FIND BEST BETA VALUE
@@ -151,10 +143,15 @@ best_beta = None
 lowest_val_loss = float('inf')
 
 for beta in beta_values:
+    if log_wandb:
+        wandb.init(# set the wandb project where this run will be logged
+        project="mobilenet-astrospikes",
+        name=config.transformation.method+"_beta_"+str(beta),
+        # track hyperparameters and run metadata
+        config=OmegaConf.to_container(config))
     logging.info(f"Training with beta = {beta}")
-
-    # Use the loss function with the current beta value
     loss = PoseEstimationLoss(beta=beta)
+    # Use the loss function with the current beta value
     model_keras.compile(loss=loss,
                         optimizer=tf.keras.optimizers.Adam(learning_rate=config.learning_rate),
                         metrics=[config.metrics[0]])
@@ -169,7 +166,8 @@ for beta in beta_values:
     if val_loss < lowest_val_loss:
         lowest_val_loss = val_loss
         best_beta = beta
-
+    if log_wandb:
+        wandb.finish()
 logging.info(f"Best beta found: {best_beta} with validation loss {lowest_val_loss}")
 
 # Train the model with the best beta value
@@ -177,9 +175,17 @@ loss = PoseEstimationLoss(beta=best_beta)
 model_keras.compile(loss=loss,
                     optimizer=tf.keras.optimizers.Adam(learning_rate=config.learning_rate),
                     metrics=[config.metrics[0]])
-
-history = model_keras.fit(train_dataset, epochs=EPOCHS, batch_size=BATCH_SIZE,
+if log_wandb:
+    wandb.init(# set the wandb project where this run will be logged
+    project="mobilenet-astrospikes",
+    name=config.transformation.method+"_final",
+    # track hyperparameters and run metadata
+    config=OmegaConf.to_container(config))
+history = model_keras.fit(train_dataset, epochs=100, batch_size=BATCH_SIZE,
                           callbacks=callbacks, verbose=2, shuffle=True, validation_data=test_dataset)
+
+
+
 
 if log_wandb :
     # Log the final model training to WandB
@@ -194,5 +200,4 @@ def set_default(obj):
         return list(obj)
     raise TypeError
 
-json.dump(history, open("history_model.json", 'w'), default=set_default)
 logging.info("Training over")
