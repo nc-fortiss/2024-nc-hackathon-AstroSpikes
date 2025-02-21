@@ -38,10 +38,7 @@ class PoseEstimationLoss(tf.keras.losses.Loss):
         self.quat_loss = None
 
     def call(self, y_true, y_pred):
-        # Split the predictions and targets into pose and quaternion parameters
-        # Extract first 3 values for the pose
-        pred_pose = y_pred[:, :3]  # First 3 values for pose
-        # Extract last 4 values for the quaternion
+        pred_pose = y_pred[:, :3]  # First 3 values for position
         pred_quat = y_pred[:, 3:]  # Last 4 values for quaternion
         
         target_pose = y_true[:, :3]
@@ -51,13 +48,17 @@ class PoseEstimationLoss(tf.keras.losses.Loss):
         pred_quat_norm = pred_quat / tf.norm(pred_quat, axis=1, keepdims=True)
 
         # Compute position loss (MSE)
-        self.pose_loss = self.mse(target_pose, pred_pose)
+        pose_loss_tensor = self.mse(target_pose, pred_pose)
 
         # Compute orientation loss (Quaternion MSE)
-        self.quat_loss = self.mse(target_quat, pred_quat_norm)
+        quat_loss_tensor = self.mse(target_quat, pred_quat_norm)
 
         # Total loss as a linear combination of the two losses with scaling factor beta
-        total_loss = self.pose_loss + self.beta * self.quat_loss
+        total_loss = pose_loss_tensor + self.beta * quat_loss_tensor
+
+        # convert to floats
+        self.pose_loss = float(pose_loss_tensor.numpy())
+        self.quat_loss = float(quat_loss_tensor.numpy())
 
         return total_loss
 
@@ -74,14 +75,15 @@ class WandbCallback(tf.keras.callbacks.Callback):
             pose_loss = loss_fn.pose_loss
             quat_loss = loss_fn.quat_loss
 
-            if quat_loss is not None and tf.reduce_mean(quat_loss).numpy() != 0:
-                beta_ratio = tf.reduce_mean(pose_loss).numpy() / tf.reduce_mean(quat_loss).numpy()
-            else:
-                beta_ratio = 0
+            if quat_loss is not None and pose_loss is not None:
+                if quat_loss != 0:
+                    beta_ratio = pose_loss / quat_loss
+                else:
+                    beta_ratio = 0.0
 
             wandb.log({
-                "train_pose_loss": tf.reduce_mean(pose_loss).numpy(),
-                "train_quat_loss": tf.reduce_mean(quat_loss).numpy(),
+                "train_pose_loss": pose_loss,
+                "train_quat_loss": quat_loss,
                 "train_beta_ratio": beta_ratio,
                 "train_mae": logs['mean_absolute_error'], 
                 "train_loss": logs['loss']
@@ -101,14 +103,15 @@ class WandbCallback(tf.keras.callbacks.Callback):
             pose_loss = loss_fn.pose_loss
             quat_loss = loss_fn.quat_loss
             
-            if quat_loss is not None and tf.reduce_mean(quat_loss).numpy() != 0:
-                beta_ratio = tf.reduce_mean(pose_loss).numpy() / tf.reduce_mean(quat_loss).numpy()
-            else:
-                beta_ratio = 0
+            if quat_loss is not None and pose_loss is not None:
+                if quat_loss != 0:
+                    beta_ratio = pose_loss / quat_loss
+                else:
+                    beta_ratio = 0.0
 
             wandb.log({
-                "val_pose_loss": tf.reduce_mean(pose_loss).numpy(),
-                "val_quat_loss": tf.reduce_mean(quat_loss).numpy(),
+                "val_pose_loss": pose_loss,
+                "val_quat_loss": quat_loss,
                 "val_beta_ratio": beta_ratio,
                 "val_mae": logs['val_mean_absolute_error'],
                 "val_loss": logs['val_loss']
