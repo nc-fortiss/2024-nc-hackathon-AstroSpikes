@@ -34,9 +34,6 @@ class PoseEstimationLoss(tf.keras.losses.Loss):
         self.beta = beta  # Beta is now a fixed scaling factor for each run
         self.mse = tf.keras.losses.MeanSquaredError()
 
-        self.pose_loss = None
-        self.quat_loss = None
-
     def call(self, y_true, y_pred):
         pred_pose = y_pred[:, :3]  # First 3 values for position
         pred_quat = y_pred[:, 3:]  # Last 4 values for quaternion
@@ -44,8 +41,9 @@ class PoseEstimationLoss(tf.keras.losses.Loss):
         target_pose = y_true[:, :3]
         target_quat = y_true[:, 3:]
 
+        epsilon = 1e-7
         # Normalize the predicted quaternion
-        pred_quat_norm = pred_quat / tf.norm(pred_quat, axis=1, keepdims=True)
+        pred_quat_norm = pred_quat / (tf.norm(pred_quat, axis=1, keepdims=True) + epsilon)
 
         # Compute position loss (MSE)
         pose_loss_tensor = self.mse(target_pose, pred_pose)
@@ -56,69 +54,81 @@ class PoseEstimationLoss(tf.keras.losses.Loss):
         # Total loss as a linear combination of the two losses with scaling factor beta
         total_loss = pose_loss_tensor + self.beta * quat_loss_tensor
 
-        # convert to floats
-        self.pose_loss = float(pose_loss_tensor.numpy())
-        self.quat_loss = float(quat_loss_tensor.numpy())
+        # wandb.log({
+        #     "pose_loss": float(pose_loss_tensor.numpy()),
+        #     "quat_loss": float(quat_loss_tensor.numpy()),
+        #     "beta_ratio": float((pose_loss_tensor / (quat_loss_tensor + epsilon)).numpy())
+        # })
 
         return total_loss
 
+class CheckWeightsCallback(tf.keras.callbacks.Callback):
+    def __init__(self):
+        super().__init__()
+        self.weight_differences_over_time = []
+
+    def on_test_begin(self, logs=None):
+        self.weights_before = [layer.get_weights() for layer in self.model.layers]
+        print("Weights captured on_test_begin")
+
+    def on_test_end(self, logs=None):
+        weights_after = [layer.get_weights() for layer in self.model.layers]
+        differences = []
+
+        # Compare weights before and after
+        for i, (before, after) in enumerate(zip(self.weights_before, weights_after)):
+            if len(before) > 0:  # Only check layers with weights
+                difference = np.mean([np.mean(np.abs(b - a)) for b, a in zip(before, after)])
+                differences.append(difference)
+                print(f"Weight difference for layer {i}: {difference}")
+
+        # Calculate the mean difference across all layers for this phase
+        mean_difference = np.mean(differences)
+        self.weight_differences_over_time.append(mean_difference)
+        
+        # Log the weight differences as a line plot to WandB
+        wandb.log({"weight_differences_line": self.weight_differences_over_time})
+        print("Weights checked on_test_end")
+
+class CheckModelModeCallback(tf.keras.callbacks.Callback):
+    def on_test_begin(self, logs=None):
+        mode = 'Training' if self.model.training else 'Evaluation'
+        print(f"Model mode at on_test_begin: {mode}")
+
+        # Log as text using WandB Table
+        table = wandb.Table(columns=["Phase", "Mode"])
+        table.add_data("on_test_begin", mode)
+        wandb.log({"model_mode": table})
+
+    def on_test_end(self, logs=None):
+        mode = 'Training' if self.model.training else 'Evaluation'
+        print(f"Model mode at on_test_end: {mode}")
+
+        # Log as text using WandB Table
+        table = wandb.Table(columns=["Phase", "Mode"])
+        table.add_data("on_test_end", mode)
+        wandb.log({"model_mode": table})
 
 class WandbCallback(tf.keras.callbacks.Callback):
     def on_train_batch_end(self, batch, logs=None):
         dict_keys = logs.keys()
         keys = list(dict_keys)
         logging.info("...Training: end of batch {}; got log keys: {}".format(batch, keys))
-
-        loss_fn = self.model.loss
-        
-        if isinstance(loss_fn, PoseEstimationLoss):
-            pose_loss = loss_fn.pose_loss
-            quat_loss = loss_fn.quat_loss
-
-            if quat_loss is not None and pose_loss is not None:
-                if quat_loss != 0:
-                    beta_ratio = pose_loss / quat_loss
-                else:
-                    beta_ratio = 0.0
-
-            wandb.log({
-                "train_pose_loss": pose_loss,
-                "train_quat_loss": quat_loss,
-                "train_beta_ratio": beta_ratio,
-                "train_mae": logs['mean_absolute_error'], 
-                "train_loss": logs['loss']
-            })
-
-            loss_fn.pose_loss = None
-            loss_fn.quat_loss = None
-
-    def on_epoch_end(self, epoch, logs=None):
-        dict_keys = logs.keys()
-        keys = list(dict_keys)
-        logging.info("...Training: start of epoch {}; got log keys: {}".format(epoch, keys))
-
-        loss_fn = self.model.loss
-        
-        if isinstance(loss_fn, PoseEstimationLoss):
-            pose_loss = loss_fn.pose_loss
-            quat_loss = loss_fn.quat_loss
             
-            if quat_loss is not None and pose_loss is not None:
-                if quat_loss != 0:
-                    beta_ratio = pose_loss / quat_loss
-                else:
-                    beta_ratio = 0.0
+        wandb.log({
+            "train_mae": logs['mean_absolute_error'], 
+            "train_loss": logs['loss']
+        })
 
-            wandb.log({
-                "val_pose_loss": pose_loss,
-                "val_quat_loss": quat_loss,
-                "val_beta_ratio": beta_ratio,
-                "val_mae": logs['val_mean_absolute_error'],
-                "val_loss": logs['val_loss']
-            })
+    # def on_epoch_end(self, epoch, logs=None):
+    #     dict_keys = logs.keys()
+    #     keys = list(dict_keys)
+    #     logging.info("...Training: start of epoch {}; got log keys: {}".format(epoch, keys))
 
-            loss_fn.pose_loss = None
-            loss_fn.quat_loss = None
+    #     wandb.log({
+    #         "val_mae": logs['val_mean_absolute_error'],
+    #         "val_loss": logs['val_loss']
+    #     })
 
 model_name = "./model_pretrained" + datetime.now().strftime("%Y%m%d_%H%M_") + ".keras"
 logging.info("Training the model : " + model_name)
@@ -180,7 +190,7 @@ with set_akida_version(AkidaVersion.v1):
 logging.info(model_keras.summary())
 logging.info("Training model " + model_name)
 
-callbacks = [layers_callback, checkpoint_callback, WandbCallback()] if  log_wandb else [layers_callback, checkpoint_callback] 
+callbacks = [layers_callback, checkpoint_callback, WandbCallback(), CheckWeightsCallback(), CheckModelModeCallback()] if  log_wandb else [layers_callback, checkpoint_callback] 
 
 ### TRAINING LOOP TO FIND BEST BETA VALUE
 
