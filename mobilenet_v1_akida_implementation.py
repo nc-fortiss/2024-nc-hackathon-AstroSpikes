@@ -180,19 +180,21 @@ with set_akida_version(AkidaVersion.v1):
         # print("new_layer ", new_layer, new_layer.name, len(new_layer.trainable_weights))
         model_keras.add(new_layer)
 
-    model_keras.add(tf.keras.layers.Flatten())
+    model_keras.add(tf.keras.layers.GlobalAveragePooling2D())
+    model_keras.add(tf.keras.layers.BatchNormalization())
+    model_keras.add(tf.keras.layers.Dropout(0.3))
     model_keras.add(tf.keras.layers.Dense(7, activation='linear'))
     
     ### DEFINE MODEL
-    def scheduler(epoch, lr):
-        if epoch < 400:
-            return 1e-4
-        elif epoch < 800 :
-            return 1e-5
-        else :
-            return 1e-5
+    # def scheduler(epoch, lr):
+    #     if epoch < 400:
+    #         return 1e-4
+    #     elif epoch < 800 :
+    #         return 1e-5
+    #     else :
+    #         return 1e-5
         
-    layers_callback = tf.keras.callbacks.LearningRateScheduler(scheduler)
+    # layers_callback = tf.keras.callbacks.LearningRateScheduler(scheduler)
     checkpoint_callback = tf.keras.callbacks.ModelCheckpoint("/home/lecomte/AstroSpikes/2024-nc-hackathon-AstroSpikes/" + model_name,
     monitor='val_loss',
     verbose=config.verbose,
@@ -209,7 +211,7 @@ with set_akida_version(AkidaVersion.v1):
 logging.info(model_keras.summary())
 logging.info("Training model " + model_name)
 
-callbacks = [layers_callback, checkpoint_callback, WandbCallback(), CheckWeightsCallback(), CheckModelModeCallback(), PrintLabelsCallback()] if  log_wandb else [layers_callback, checkpoint_callback] 
+callbacks = [checkpoint_callback, WandbCallback(), PrintLabelsCallback()] if  log_wandb else [checkpoint_callback] 
 
 ### TRAINING LOOP TO FIND BEST BETA VALUE
 

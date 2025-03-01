@@ -3,7 +3,7 @@ paths:
   output_dir: "./generated_dataset"
 
 transformation:
-  method: "three_c_representation"
+  method: "lnes"
 
 filter:
   method: "get_distribution"
@@ -15,7 +15,7 @@ filter:
 
 dataset_type: "synthetic"
 
-batch_size: 64
+batch_size: 512
 test_split: 0.2
 
 alpha: 0.7
