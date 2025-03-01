@@ -90,6 +90,25 @@ class CheckWeightsCallback(tf.keras.callbacks.Callback):
         wandb.log({"weight_differences_line": self.weight_differences_over_time})
         print("Weights checked on_test_end")
 
+class PrintLabelsCallback(tf.keras.callbacks.Callback):
+    def on_epoch_begin(self, epoch, logs=None):
+        print(f"\n🚀 Epoch {epoch + 1} - First 10 training labels:")
+
+        # Fetch first batch of training data
+        for batch in self.model.train_dataset.take(1):
+            labels = batch[1].numpy()[:10]  # First 5 labels
+            print(labels)
+            break  # Exit after printing the first batch
+
+    def on_test_begin(self, logs=None):
+        print(f"\n📊 Validation - First 10 testing labels:")
+
+        # Fetch first batch of validation data
+        for batch in self.model.validation_data.take(1):
+            labels = batch[1].numpy()[:10]  # First 5 labels
+            print(labels)
+            break  # Exit after printing the first batch
+
 class CheckModelModeCallback(tf.keras.callbacks.Callback):
     def on_test_begin(self, logs=None):
         mode = 'Training' if self.model.training else 'Evaluation'
@@ -190,7 +209,7 @@ with set_akida_version(AkidaVersion.v1):
 logging.info(model_keras.summary())
 logging.info("Training model " + model_name)
 
-callbacks = [layers_callback, checkpoint_callback, WandbCallback(), CheckWeightsCallback(), CheckModelModeCallback()] if  log_wandb else [layers_callback, checkpoint_callback] 
+callbacks = [layers_callback, checkpoint_callback, WandbCallback(), CheckWeightsCallback(), CheckModelModeCallback(), PrintLabelsCallback()] if  log_wandb else [layers_callback, checkpoint_callback] 
 
 ### TRAINING LOOP TO FIND BEST BETA VALUE
 

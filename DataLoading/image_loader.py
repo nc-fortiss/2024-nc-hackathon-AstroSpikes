@@ -24,14 +24,14 @@ class ImageDataLoader:
         dataset = self.load_dataset_from_directory(self.root)
         dataset_size = dataset.cardinality().numpy()
         #shuffling the whole dataset with max buffer size
-        dataset = dataset.shuffle(buffer_size=dataset_size, seed=42)
+        dataset = dataset.shuffle(buffer_size=dataset_size, reshuffle_each_iteration=True)
 
         # Split the dataset into train and test
         train, test = self.split_dataset(dataset)
 
         # Shuffle only the training dataset
         train_size = train.cardinality().numpy()
-        train = train.shuffle(buffer_size=train_size, seed=42).batch(self.batch_size).prefetch(tf.data.AUTOTUNE)
+        train = train.shuffle(buffer_size=train_size, reshuffle_each_iteration=True).batch(self.batch_size).prefetch(tf.data.AUTOTUNE)
 
         # Batch the test dataset
         test = test.batch(self.batch_size).prefetch(tf.data.AUTOTUNE)
