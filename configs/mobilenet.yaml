@@ -1,0 +1,39 @@
+id: mobilenet_lnes_syn
+root:
+  dataset: "/home/arunkumar/datasets/SPADES"
+  data_out: "/home/arunkumar/datasets/SPADES/synthetic"
+  checkpoint: "/home/arunkumar/experiments/SPADES"
+
+
+filter:
+  method: "get_distribution"
+  parameters:
+    conditions:
+      - [ 280, False ]
+      - [ 1000, True ]
+      - [ 1280, False ]
+
+data:
+  transformation: "lnes"
+  source: "synthetic"
+  input_size: [ 224, 224, 3 ]
+  test_split: 0.2
+
+metrics:
+  - "mean_absolute_error"
+
+training:
+  lr: 1e-3
+  num_epochs: 100
+  beta_epochs: 5
+  verbose: 1
+  batch_size: 32
+  log_Step: 1
+  val_log_Step: 1
+
+model:
+  pretrained: False
+  trained_weights:
+
+log:
+  wandb: False

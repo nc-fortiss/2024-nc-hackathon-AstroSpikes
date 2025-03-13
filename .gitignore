@@ -5,3 +5,7 @@ data
 *.sif
 visualizations/*.png
 *__pycache__*
+wandb/*
+/wandb/
+/.idea/*
+/.idea/
