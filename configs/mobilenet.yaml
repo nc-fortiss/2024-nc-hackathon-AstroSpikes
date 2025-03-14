@@ -19,9 +19,6 @@ data:
   input_size: [ 224, 224, 3 ]
   test_split: 0.2
 
-metrics:
-  - "mean_absolute_error"
-
 training:
   lr: 1e-3
   num_epochs: 100
@@ -33,7 +30,6 @@ training:
 
 model:
   pretrained: False
-  trained_weights: '/home/arunkumar/experiments/SPADES/mobilenet_lnes_syn/20250313_164239/model_16_0.5322.keras'
+  trained_weights:
 
-log:
-  wandb: False
+wandb: 'online'
