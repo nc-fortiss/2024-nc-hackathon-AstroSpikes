@@ -22,4 +22,4 @@ class Filters:
 
         fraction_active = np.sum(counts[band_active]) / np.sum(counts)
 
-        return (fraction_active > 0.8)
+        return fraction_active > 0.8

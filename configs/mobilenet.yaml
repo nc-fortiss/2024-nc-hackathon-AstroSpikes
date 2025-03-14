@@ -2,8 +2,8 @@ id: mobilenet_lnes_syn
 root:
   dataset: "/home/arunkumar/datasets/SPADES"
   data_out: "/home/arunkumar/datasets/SPADES/synthetic"
-  checkpoint: "/home/arunkumar/experiments/SPADES"
-
+  checkpoint: "/home/arunkumar/experiments/SPADES/${id}"
+  test_data: '/home/arunkumar/experiments/SPADES/mobilenet_lnes_syn/20250314_150250/val_files.csv'
 
 filter:
   method: "get_distribution"
@@ -33,7 +33,7 @@ training:
 
 model:
   pretrained: False
-  trained_weights:
+  trained_weights: '/home/arunkumar/experiments/SPADES/mobilenet_lnes_syn/20250313_164239/model_16_0.5322.keras'
 
 log:
   wandb: False

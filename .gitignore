@@ -6,6 +6,9 @@ data
 visualizations/*.png
 *__pycache__*
 wandb/*
-/wandb/
+wandb/
 /.idea/*
 /.idea/
+/wandb/latest-run/
+/extras/
+extras/*
