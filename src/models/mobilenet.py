@@ -1,9 +1,11 @@
 import akida_models.imagenet.model_mobilenet as mobilenet
 import tensorflow as tf
 from cnn2snn import set_akida_version, AkidaVersion
+import keras.backend as K
+import sys
 
 
-def MobilenetModel(input_size=(224, 224, 3), pretrained=False):
+def MobilenetModel(input_size, pretrained=False):
     with set_akida_version(AkidaVersion.v1):
         if pretrained:
             base_model = mobilenet.mobilenet_imagenet_pretrained(alpha=1.0, quantized=False)

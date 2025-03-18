@@ -30,8 +30,8 @@ class SamplesDataLoader(tonic.Dataset):
         """
         Load event and label files and pair them appropriately.
 
-        Returns:
-            list of tuples: Each tuple contains paths to an event file and its corresponding label file (for synthetic data).
+        Returns: list of tuples: Each tuple contains paths to an event file and its corresponding label file (for
+        synthetic data).
         """
         samples = []
         events_dir = os.path.join(self.dataset_dir, self.dataset_type, "events")
@@ -137,12 +137,6 @@ class SamplesDataLoader(tonic.Dataset):
         # get the trajectory name from the index
         traj_name = self.samples[idx][0].split('/')[-1].split('.')[0]
 
-        # create a folder if it does not exist
-        # join the file path with the trajectory name
-        # file_path = file_path + '/' + traj_name + '/'
-        # if not os.path.exists(file_path):
-        #     os.makedirs(file_path)
-
         event_frames, labels = self.__getitem__(idx)
 
         if event_frames is None or labels is None:
@@ -154,15 +148,15 @@ class SamplesDataLoader(tonic.Dataset):
 
         # rgb_frames = self.generate_rgb_from_samples(events)
         for i, frame in enumerate(event_frames):
-            im = Image.fromarray(frame)
+            im = Image.fromarray(frame.transpose(1, 0, 2))
             number = f"{i:03}"
-            im.save(f"{file_path}img{number}_{traj_name[4:]}.png")
-            im.save(f"{file_path}img{number}_{traj_name[4:]}.png")
+            im.save(f"{file_path}img{number}_{traj_name}.png")
+            im.save(f"{file_path}img{number}_{traj_name}.png")
 
         # copy csv file to folder
-        csv_file_path = dataset_dir + '/synthetic/labels/' + traj_name + '.csv'
-        csv_dest_path = file_path + traj_name + '.csv'
-        shutil.copy(csv_file_path, csv_dest_path)
+        # csv_file_path = dataset_dir + '/synthetic/labels/' + traj_name + '.csv'
+        # csv_dest_path = file_path + traj_name + '.csv'
+        # shutil.copy(csv_file_path, csv_dest_path)
 
         return True
 

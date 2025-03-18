@@ -90,13 +90,13 @@ class Transformations:
 
     def lnes(self, events, intervalLength=1000):
         # Define transformation pipeline
-        transform = transforms.Compose([
-            transforms.CenterCrop(sensor_size=(1280, 720, 1), size=(720, 720)),
-            transforms.Downsample(spatial_factor=self.img_size / 720),
-        ])
-
+        # transform = transforms.Compose([
+        #     transforms.CenterCrop(sensor_size=(1280, 720, 1), size=(720, 720)),
+        #     transforms.Downsample(spatial_factor=self.img_size / 720),
+        # ])
+        t_events = events
         # Transform and sort events by timestamp
-        t_events = transform(events)
+        # t_events = transform(events)
         t_events = t_events[t_events['t'].argsort()]  # Sort events by time
 
         # Initialize parameters
@@ -105,7 +105,8 @@ class Transformations:
         n_time_bins = int((t_end - t_start) // intervalLength) + 1
 
         # Pre-allocate output array (n_time_bins, 240, 240, 3)
-        ret = np.zeros((n_time_bins, self.img_size, self.img_size, self.config.data.input_size[2]), dtype=np.float32)
+        ret = np.zeros((n_time_bins, 1280, 720, self.config.data.input_size[2]), dtype=np.float32)
+        # ret = np.zeros((n_time_bins, self.img_size, self.img_size, self.config.data.input_size[2]), dtype=np.float32)
 
         # Assign events to time bins
         bin_indices = ((t_events['t'] - t_start) // intervalLength).astype(np.int32)

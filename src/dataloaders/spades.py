@@ -76,7 +76,6 @@ class ImageDataLoader(tf.keras.utils.Sequence):
         """Loads and preprocesses a single image."""
         image = load_img(filepath, target_size=self.input_image_size)
         image = img_to_array(image) / 255.0  # Normalize to [0, 1]
-
         return image
 
     def on_epoch_end(self):

@@ -9,6 +9,7 @@ import csv
 import cv2
 from src.models.mobilenet import MobilenetModel
 import glob
+from tensorflow.keras.preprocessing.image import load_img, img_to_array
 
 
 class PoseInference:
@@ -16,7 +17,7 @@ class PoseInference:
 
         print(cfg.model.trained_weights)
         tf.keras.utils.get_custom_objects().update({'PoseEstimationLoss': PoseEstimationLoss})
-
+        self.input_image_size = cfg.data.input_size
         input_shape = list(cfg.data.input_size)  # Convert ListConfig to a standard list
         self.model = MobilenetModel(input_size=input_shape, pretrained=cfg.model.pretrained)
         self.model.build(input_shape=(None, *input_shape))  # None is for batch size
@@ -29,18 +30,18 @@ class PoseInference:
         self.K = np.array(data["cameraMatrix"])
         print("Camera intrinsic matrix K loaded successfully!")
 
-        # self.dest_dir = dest_dir
-        # if not os.path.exists(self.dest_dir):
-        #     os.makedirs(self.dest_dir)
-        # print("Destination directory created successfully!")
+    def _load_image(self, filepath):
+        """Loads and preprocesses a single image."""
+        image = load_img(filepath, target_size=self.input_image_size)
+        image = img_to_array(image) / 255.0  # Normalize to [0, 1]
+        image = tf.expand_dims(image, axis=0)
+        return image
 
-    def get_model_prediction(self, img):
+    def get_model_prediction(self, filepath):
         """ Get model prediction for the input image """
-        img = tf.expand_dims(img, axis=0)
-        img = tf.image.resize_with_crop_or_pad(img, target_height=224, target_width=224)
-
-        [[x, y, z, qx, qy, qz, qw]] = self.model.predict(img)  # Get model predictions for the input image
-        return np.array([x, y, z]), np.array([qx, qy, qz, qw])  # Return the predicted translation and quaternion
+        img = self._load_image(filepath)
+        pred_pos, pred_quat = self.model.predict(img)
+        return np.array(pred_pos), np.array(pred_quat)  # Return the predicted translation and quaternion
 
 
 if __name__ == '__main__':
@@ -61,7 +62,7 @@ if __name__ == '__main__':
     for file_name in test_data:
         print(file_name)
         seq = file_name[0].split('.')[0]
-        for filename in glob.glob(os.path.join(data_root, seq, '*.png')):
-            img = cv2.imread(os.path.join(data_root, seq, filename))
-            r_pred, q_pred = infer.get_model_prediction(img)
+        for img_path in glob.glob(os.path.join(data_root, seq, '*.png')):
+            print(img_path)
+            r_pred, q_pred = infer.get_model_prediction(img_path)
             print(r_pred, q_pred)

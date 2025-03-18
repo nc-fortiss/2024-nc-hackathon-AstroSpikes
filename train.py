@@ -4,7 +4,9 @@ from datetime import datetime
 import wandb
 from omegaconf import OmegaConf
 from tensorflow import keras
+import tensorflow as tf
 from tensorflow.keras.callbacks import ModelCheckpoint
+from tensorflow.python.eager import tape
 from wandb.integration.keras import WandbMetricsLogger
 
 from src.dataloaders.spades import ImageDataLoader, CreateDF
@@ -21,9 +23,9 @@ if __name__ == '__main__':
 
     # initialize wandb
     run = wandb.init(project="mobilenet-astrospikes",
-                     name=cfg.data.transformation + "_simple_branch",
+                     name=cfg.wandb.exp_id,
                      config=OmegaConf.to_container(cfg, resolve=True),
-                     mode=cfg.wandb
+                     mode=cfg.wandb.status
                      )
     wandb.log({'config': str(wandb.config)})
 
@@ -60,6 +62,9 @@ if __name__ == '__main__':
     model.compile(loss=PoseEstimationLoss(),
                   optimizer=keras.optimizers.Adam(learning_rate=cfg.training.lr),
                   metrics={"position_output": "mse", "orientation_output": "mse"})
+
+    for layer in model.layers:
+        print(layer.output_shape)
 
     model.fit(train_dataset,
               epochs=cfg.training.num_epochs,
