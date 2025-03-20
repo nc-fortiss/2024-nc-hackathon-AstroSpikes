@@ -1,15 +1,15 @@
+import csv
+import glob
+import json
 import os
 
 import numpy as np
 import tensorflow as tf
-from src.losses.poseloss import PoseEstimationLoss
 from omegaconf import OmegaConf, DictConfig
-import json
-import csv
-import cv2
-from src.models.mobilenet import MobilenetModel
-import glob
 from tensorflow.keras.preprocessing.image import load_img, img_to_array
+
+from src.losses.poseloss import PoseEstimationLoss
+from src.models.mobilenet import MobilenetModel
 
 
 class PoseInference:
@@ -41,6 +41,7 @@ class PoseInference:
         """ Get model prediction for the input image """
         img = self._load_image(filepath)
         pred_pos, pred_quat = self.model.predict(img)
+        pred_quat = tf.linalg.normalize(pred_quat, axis=-1)[0]
         return np.array(pred_pos), np.array(pred_quat)  # Return the predicted translation and quaternion
 
 

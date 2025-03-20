@@ -1,11 +1,11 @@
-import tensorflow as tf
-import numpy as np
+import csv
 import os
-from tensorflow.keras.preprocessing.image import load_img, img_to_array
+from typing import Tuple
+
 import pandas as pd
+import tensorflow as tf
 from omegaconf import DictConfig
 from sklearn.model_selection import train_test_split
-import csv
 
 
 class CreateDF:
@@ -43,45 +43,68 @@ class CreateDF:
         return train_df, val_df
 
 
-class ImageDataLoader(tf.keras.utils.Sequence):
-    def __init__(self, cfg: DictConfig, df: pd.DataFrame):
-        self.config = cfg
-        self.batch_size = cfg.training.batch_size
-        self.input_image_size = cfg.data.input_size
-        self.is_training = True
-        self.df = df
+def create_dataset(df: pd.DataFrame, batch_size: int, input_size: Tuple[int, int], is_training: bool = True,
+                   cache_dir: str = None) -> tf.data.Dataset:
+    """
+    Creates a TensorFlow Dataset from a Pandas DataFrame for large datasets, optimizing memory usage.
 
-    def __getitem__(self, index):
-        """Generates a batch of data."""
-        # Get the batch of file paths
-        batch_filepaths = self.df['filepath'].iloc[index * self.batch_size: (index + 1) * self.batch_size].values
-        # Get the batch of labels
-        batch_positions = self.df[['Tx', 'Ty', 'Tz']].iloc[
-                       index * self.batch_size: (index + 1) * self.batch_size].values
-        batch_quaternions = self.df[['Qx', 'Qy', 'Qz', 'Qw']].iloc[
-                       index * self.batch_size: (index + 1) * self.batch_size].values
-        # Load images corresponding to the file paths
-        batch_images = np.array([self._load_image(filepath) for filepath in batch_filepaths])
+    Args:
+        df: Pandas DataFrame containing filepaths and labels.
+        batch_size: The batch size for the dataset.
+        input_size: A tuple specifying the desired image size (height, width).
+        is_training: Boolean indicating whether the dataset is for training. If True, data will be shuffled.
+        cache_dir: Optional directory to cache preprocessed data. If None, no caching is used.
 
-        # Convert batch labels to TensorFlow tensors with dtype=tf.float32
-        batch_images = tf.convert_to_tensor(batch_images, dtype=tf.float32)
-        batch_positions = tf.convert_to_tensor(batch_positions, dtype=tf.float32)
-        batch_quaternions = tf.convert_to_tensor(batch_quaternions, dtype=tf.float32)
+    Returns:
+        A TensorFlow Dataset object.
+    """
 
-        return batch_images, (batch_positions, batch_quaternions)
-
-        # return batch_images, batch_positions
-
-    def _load_image(self, filepath):
-        """Loads and preprocesses a single image."""
-        image = load_img(filepath, target_size=self.input_image_size)
-        image = img_to_array(image) / 255.0  # Normalize to [0, 1]
+    def _load_and_preprocess(filepath: tf.Tensor) -> tf.Tensor:
+        """Loads, preprocesses, and converts a single image to a tensor."""
+        image = tf.io.read_file(filepath)
+        image = tf.image.decode_jpeg(image, channels=3)  # Or decode_png, depending on your image format
+        image = tf.image.resize(image, input_size)
+        image = tf.image.convert_image_dtype(image, dtype=tf.float32)  # Normalize to [0, 1]
         return image
 
-    def on_epoch_end(self):
-        """Shuffles data at epoch end."""
-        return self.df.sample(frac=1).reset_index(drop=True)
+    def _prepare_data(filepath: tf.Tensor, Tx: tf.Tensor, Ty: tf.Tensor, Tz: tf.Tensor, Qx: tf.Tensor, Qy: tf.Tensor,
+                      Qz: tf.Tensor, Qw: tf.Tensor) -> Tuple[tf.Tensor, Tuple[tf.Tensor, tf.Tensor]]:
+        """
+        Loads the image, positions and quaternions and returns a tuple of (image, (position, quaternion)).
+        """
+        image = _load_and_preprocess(filepath)
+        position = tf.stack([Tx, Ty, Tz], axis=-1)
+        quaternion = tf.stack([Qx, Qy, Qz, Qw], axis=-1)
+        return image, (position, quaternion)
 
-    def __len__(self):
-        """Number of batches per epoch."""
-        return self.df.shape[0] // self.batch_size
+    # Convert DataFrame columns to TensorFlow tensors
+    filepaths = tf.constant(df['filepath'].values)
+    Tx = tf.constant(df['Tx'].values, dtype=tf.float32)
+    Ty = tf.constant(df['Ty'].values, dtype=tf.float32)
+    Tz = tf.constant(df['Tz'].values, dtype=tf.float32)
+    Qx = tf.constant(df['Qx'].values, dtype=tf.float32)
+    Qy = tf.constant(df['Qy'].values, dtype=tf.float32)
+    Qz = tf.constant(df['Qz'].values, dtype=tf.float32)
+    Qw = tf.constant(df['Qw'].values, dtype=tf.float32)
+
+    # Create a tf.data.Dataset from the tensors
+    dataset = tf.data.Dataset.from_tensor_slices((filepaths, Tx, Ty, Tz, Qx, Qy, Qz, Qw))
+
+    if is_training:
+        # Create a dataset that repeats indefinitely for training
+        dataset = dataset.repeat()
+        dataset = dataset.shuffle(buffer_size=df.shape[0])
+
+    # Map the data preparation function to the dataset
+    dataset = dataset.map(_prepare_data, num_parallel_calls=tf.data.AUTOTUNE)
+
+    # Cache the preprocessed data
+    if cache_dir:
+        os.makedirs(cache_dir, exist_ok=True)  # Create cache directory if it doesn't exist
+        cache_file = os.path.join(cache_dir, "dataset_cache")
+        dataset = dataset.cache(cache_file)
+
+    dataset = dataset.batch(batch_size, drop_remainder=True)  # Drop the last incomplete batch
+    dataset = dataset.prefetch(tf.data.AUTOTUNE)  # Improves performance by prefetching data
+
+    return dataset

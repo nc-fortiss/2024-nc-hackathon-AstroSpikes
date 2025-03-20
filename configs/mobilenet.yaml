@@ -3,7 +3,7 @@ root:
   dataset: "/home/arunkumar/datasets/SPADES"
   data_out: "/home/arunkumar/datasets/SPADES/synthetic"
   checkpoint: "/home/arunkumar/experiments/SPADES/${id}"
-  test_data: "/home/arunkumar/experiments/SPADES/mobilenet_lnes_syn/20250318_123726/val_files.csv"
+  test_data: "/home/arunkumar/experiments/SPADES/mobilenet_lnes_syn/20250320_110631/val_files.csv"
 
 filter:
   method: "get_distribution"
@@ -30,8 +30,8 @@ training:
 
 model:
   pretrained: False
-  trained_weights: /home/arunkumar/experiments/SPADES/mobilenet_lnes_syn/20250318_123726/model_06_2.5003.keras
+  trained_weights: /home/arunkumar/experiments/SPADES/mobilenet_lnes_syn/20250320_110631/model_24_1.4729.keras
 
 wandb:
   status: 'offline'
-  exp_id: 'ak_mobilenet_lnes_mse_loss'
+  exp_id: 'ak_mobilenet_lnes_single_mse_loss'

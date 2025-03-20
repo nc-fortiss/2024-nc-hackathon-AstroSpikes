@@ -6,10 +6,9 @@ from omegaconf import OmegaConf
 from tensorflow import keras
 import tensorflow as tf
 from tensorflow.keras.callbacks import ModelCheckpoint
-from tensorflow.python.eager import tape
 from wandb.integration.keras import WandbMetricsLogger
 
-from src.dataloaders.spades import ImageDataLoader, CreateDF
+from src.dataloaders.spades import CreateDF, create_dataset
 from src.losses.poseloss import PoseEstimationLoss
 from src.models.mobilenet import MobilenetModel
 
@@ -48,6 +47,11 @@ if __name__ == '__main__':
         save_best_only=True,
         mode='min')
 
+    logdir = "logs/train/" + datetime.now().strftime("%Y%m%d-%H%M%S")
+    tensorboard_callback = tf.keras.callbacks.TensorBoard(
+        log_dir=logdir,
+        update_freq='batch')
+
     # Wandb Metric Logger
     wml = WandbMetricsLogger(log_freq='batch')
 
@@ -55,21 +59,43 @@ if __name__ == '__main__':
     data_creation = CreateDF(cfg=cfg)
     data_creation.save_file(checkpoint_dir)
     train_df, val_df = data_creation()
-    train_dataset = ImageDataLoader(cfg=cfg, df=train_df)
-    val_dataset = ImageDataLoader(cfg=cfg, df=val_df)
+
+    train_dataset = create_dataset(train_df, batch_size=cfg.training.batch_size,
+                                   input_size=cfg.data.input_size[:2],
+                                   is_training=True,
+                                   cache_dir=None)
+    # train_dataset = train_dataset.shuffle(buffer_size=train_dataset.cardinality(), reshuffle_each_iteration=True)
+    val_dataset = create_dataset(val_df, batch_size=cfg.training.batch_size,
+                                 input_size=cfg.data.input_size[:2],
+                                 is_training=False,
+                                 cache_dir=None)
+    # val_dataset = val_dataset.shuffle(buffer_size=val_dataset.cardinality(), reshuffle_each_iteration=True)
+
+    initial_learning_rate = cfg.training.lr
+    decay_steps = 1e4  # Adjust based on your dataset size and epochs
+    decay_rate = 0.96  # Typical value
+
+    lr_schedule = tf.keras.optimizers.schedules.ExponentialDecay(
+        initial_learning_rate,
+        decay_steps=decay_steps,
+        decay_rate=decay_rate,
+        staircase=True)
+
+    optimizer = tf.keras.optimizers.Adam(learning_rate=lr_schedule, clipnorm=1.0)
 
     # Training Loop
     model.compile(loss=PoseEstimationLoss(),
-                  optimizer=keras.optimizers.Adam(learning_rate=cfg.training.lr),
-                  metrics={"position_output": "mse", "orientation_output": "mse"})
+                  optimizer=optimizer)
 
-    for layer in model.layers:
-        print(layer.output_shape)
+    steps_per_epoch = len(train_df) // cfg.training.batch_size  # Calculate steps per epoch
+    validation_steps = len(val_df) // cfg.training.batch_size
 
     model.fit(train_dataset,
               epochs=cfg.training.num_epochs,
               batch_size=cfg.training.batch_size,
-              callbacks=[checkpoint_callback, wml],
-              validation_data=val_dataset)
+              steps_per_epoch=steps_per_epoch,
+              callbacks=[checkpoint_callback, wml, tensorboard_callback],
+              validation_data=val_dataset,
+              validation_steps=validation_steps)
 
     run.finish()
