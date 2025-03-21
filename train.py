@@ -6,7 +6,7 @@ from omegaconf import OmegaConf
 from tensorflow import keras
 import tensorflow as tf
 from tensorflow.keras.callbacks import ModelCheckpoint
-from wandb.integration.keras import WandbMetricsLogger
+from wandb.integration.keras import WandbMetricsLogger, WandbModelCheckpoint
 
 from src.dataloaders.spades import CreateDF, create_dataset
 from src.losses.poseloss import PoseEstimationLoss
@@ -20,23 +20,20 @@ if __name__ == '__main__':
     except Exception as e:
         print("Error loading YAML:", e)
 
-    # initialize wandb
-    run = wandb.init(project="mobilenet-astrospikes",
-                     name=cfg.wandb.exp_id,
-                     config=OmegaConf.to_container(cfg, resolve=True),
-                     mode=cfg.wandb.status
-                     )
-    wandb.log({'config': str(wandb.config)})
-
-    # Initialize model.
-    input_shape = list(cfg.data.input_size)  # Convert ListConfig to a standard list
-    model = MobilenetModel(input_size=input_shape, pretrained=cfg.model.pretrained)
-    model.build(input_shape=(None, *input_shape))  # None is for batch size
-    wandb.log({"model_summary": model.summary()})
-
     exp_folder = str(datetime.now().strftime("%Y%m%d_%H%M%S"))
     checkpoint_dir = str(os.path.join(cfg.root.checkpoint, exp_folder))
     os.makedirs(checkpoint_dir, exist_ok=True)
+    logdir = str(os.path.join(checkpoint_dir, 'logs'))
+    # wandb.tensorboard.patch(root_logdir=logdir)
+
+    # initialize wandb
+    run = wandb.init(project="mobilenet-astrospikes",
+                     dir=checkpoint_dir,
+                     name=cfg.wandb.exp_id,
+                     config=OmegaConf.to_container(cfg, resolve=True),
+                     mode=cfg.wandb.status,
+                     )
+    wandb.log({'config': str(wandb.config)})
 
     # Setup WandbModelCheckpoint
     model_name = "model_{epoch:02d}_{val_loss:.4f}.keras"
@@ -47,10 +44,9 @@ if __name__ == '__main__':
         save_best_only=True,
         mode='min')
 
-    logdir = "logs/train/" + datetime.now().strftime("%Y%m%d-%H%M%S")
-    tensorboard_callback = tf.keras.callbacks.TensorBoard(
-        log_dir=logdir,
-        update_freq='batch')
+    # tensorboard_callback = tf.keras.callbacks.TensorBoard(
+    #     log_dir=logdir,
+    #     update_freq='batch')
 
     # Wandb Metric Logger
     wml = WandbMetricsLogger(log_freq='batch')
@@ -72,7 +68,7 @@ if __name__ == '__main__':
     # val_dataset = val_dataset.shuffle(buffer_size=val_dataset.cardinality(), reshuffle_each_iteration=True)
 
     initial_learning_rate = cfg.training.lr
-    decay_steps = 1e4  # Adjust based on your dataset size and epochs
+    decay_steps = 2e4  # Adjust based on your dataset size and epochs
     decay_rate = 0.96  # Typical value
 
     lr_schedule = tf.keras.optimizers.schedules.ExponentialDecay(
@@ -82,6 +78,13 @@ if __name__ == '__main__':
         staircase=True)
 
     optimizer = tf.keras.optimizers.Adam(learning_rate=lr_schedule, clipnorm=1.0)
+
+    # Initialize model.
+    model = MobilenetModel(input_size=list(cfg.data.input_size), pretrained=cfg.model.pretrained)
+    model.build(input_shape=(None, *list(cfg.data.input_size)))  # None is for batch size
+    wandb.log({"model_summary": model.summary()})
+    print(OmegaConf.to_yaml(cfg))
+    print('Exp_ID:', exp_folder)
 
     # Training Loop
     model.compile(loss=PoseEstimationLoss(),
@@ -94,8 +97,9 @@ if __name__ == '__main__':
               epochs=cfg.training.num_epochs,
               batch_size=cfg.training.batch_size,
               steps_per_epoch=steps_per_epoch,
-              callbacks=[checkpoint_callback, wml, tensorboard_callback],
+              callbacks=[checkpoint_callback, wml],
               validation_data=val_dataset,
-              validation_steps=validation_steps)
+              validation_steps=validation_steps,
+              use_multiprocessing=True)
 
     run.finish()

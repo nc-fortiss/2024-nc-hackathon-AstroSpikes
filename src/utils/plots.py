@@ -1,115 +1,58 @@
-from matplotlib import pyplot as plt
-import numpy as np
-from scipy.spatial.transform import Rotation
 import cv2
-import os
-import pandas as pd
+import numpy as np
+from matplotlib import pyplot as plt
+from scipy.spatial.transform import Rotation
 
 
-def transform_points(xa, ya):
-    # transform the points to the center of the image
-    c = np.array([[xa[0]], [ya[0]]])
-    c = c - np.array([[280], [0]])
-    c = c / 3
+def project_points(q, r, K):
+    points = np.float32([[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]]).reshape(-1, 3)
 
-    p = np.array([[xa[1], xa[2], xa[3]], [ya[1], ya[2], ya[3]]])
-    p = p - np.array([[280], [0]])
-    p = p / 3
-    return c, p
+    rotV = np.expand_dims(Rotation.from_quat(q).as_rotvec(), axis=1)
+    image_points, _ = cv2.projectPoints(points, rotV, r, K, distCoeffs=np.zeros(5))
 
-
-def project(q, r, K):
-    """ Projecting points to image frame to draw axes """
-    # Reference points in satellite frame for drawing axes (origin and unit vectors along x, y, z)
-    p_axes = np.array([[0, 0, 0, 1],
-                       [1, 0, 0, 1],
-                       [0, 1, 0, 1],
-                       [0, 0, 1, 1]])
-    points_body = np.transpose(p_axes)  # Transpose for easier matrix operations
-
-    # Transformation to camera frame using rotation matrix and translation vector
-    pose_mat = np.hstack((Rotation.from_quat(q).as_matrix(), np.expand_dims(r, 1)))
-    p_cam = np.dot(pose_mat, points_body)  # Transform points to camera frame
-
-    # Normalize by z-coordinate to get homogeneous coordinates
-    points_camera_frame = p_cam / p_cam[2]
-
-    # Project points from 3D to 2D image plane
-    points_image_plane = K.dot(points_camera_frame)
-    x, y = (points_image_plane[0], points_image_plane[1])  # Extract x and y coordinates
-    # print("x,y: ", x, y)  # Debugging: print the projected points
-    return x, y
+    # Draw the axes on the image
+    origin = tuple(map(int, image_points[0].ravel()))
+    x_axis = tuple(map(int, image_points[1].ravel()))
+    y_axis = tuple(map(int, image_points[2].ravel()))
+    z_axis = tuple(map(int, image_points[3].ravel()))
+    return origin, x_axis, y_axis, z_axis
 
 
-def visualize_both(img, q1, r1, q2, r2, K, ax=None):
-    # plot both the predicted and the label
-    if ax is None:
-        ax = plt.gca()
-        ax.cla()
+def visualize_both(img_list, q1_list, r1_list, q2_list, r2_list, K):
+    fig, ax = plt.subplots()
 
-    ax.imshow(img)
-    scale = 50
+    index = 0  # Start from the first image
 
-    xa1, ya1 = project(q1, r1, K)
-    xa2, ya2 = project(q2, r2, K)
+    def on_key(event):
+        """Handle spacebar press to move to the next image."""
+        nonlocal index
+        if event.key == ' ' and index < len(img_list) - 1:
+            index += 1
+            update_plot(index)  # Update with the next image
+        elif event.key == 'q':  # Press 'q' to quit
+            plt.close(fig)
 
-    c1, p1 = transform_points(xa1, ya1)
-    c2, p2 = transform_points(xa2, ya2)
+    def update_plot(idx):
+        ax.clear()  # Clear previous plots
+        img = img_list[idx]
+        origin, x_axis, y_axis, z_axis = project_points(q1_list[idx], r1_list[idx], K)
 
-    v1 = p1 - c1
-    v1 = scale * v1 / np.linalg.norm(v1)
+        cv2.line(img, origin, x_axis, (255, 0, 0), 4)  # X-axis (red)
+        cv2.line(img, origin, y_axis, (0, 255, 0), 4)  # Y-axis (green)
+        cv2.line(img, origin, z_axis, (0, 0, 255), 4)  # Z-axis (blue)
 
-    v2 = p2 - c2
-    v2 = scale * v2 / np.linalg.norm(v2)
+        origin, x_axis, y_axis, z_axis = project_points(q2_list[idx], r2_list[idx], K)
 
-    # Darker shades for the label
-    ax.arrow(c1[0, 0], c1[1, 0], v1[0, 0], v1[1, 0], head_width=10, color='#990000')  # Dark red
-    ax.arrow(c1[0, 0], c1[1, 0], v1[0, 1], v1[1, 1], head_width=10, color='#009900')  # Dark green
-    ax.arrow(c1[0, 0], c1[1, 0], v1[0, 2], v1[1, 2], head_width=10, color='#000099')  # Dark blue
+        cv2.line(img, origin, x_axis, (255, 105, 180), 4)  # X-axis (Pink)
+        cv2.line(img, origin, y_axis, (144, 238, 144), 4)  # Y-axis (Light Green)
+        cv2.line(img, origin, z_axis, (0, 255, 255), 4)  # Z-axis (Cyan)
 
-    # Lighter shades for the prediction
-    ax.arrow(c2[0, 0], c2[1, 0], v2[0, 0], v2[1, 0], head_width=10, color='#FF6666')  # Light red
-    ax.arrow(c2[0, 0], c2[1, 0], v2[0, 1], v2[1, 1], head_width=10, color='#66FF66')  # Light green
-    ax.arrow(c2[0, 0], c2[1, 0], v2[0, 2], v2[1, 2], head_width=10, color='#6666FF')  # Light blue
-    return
+        # Show the image
+        ax.imshow(img)
+        plt.draw()
 
+    # Connect the key press event
+    fig.canvas.mpl_connect('key_press_event', on_key)
 
-def create_graphic(self, img_name, ax=None):
-    n_traj = img_name[-7:-4]
-    img_path = os.path.join(self.root_frames_dir, ("seq_RT" + n_traj), img_name)
-    # check if img_path is correct
-
-    # if os.path.exists(img_path):
-    #     print("img path exists")
-    # else:
-    #     print("img path does not exist")
-    img = cv2.imread(img_path)
-
-    if not os.path.exists(self.dest_dir):
-        os.makedirs(self.dest_dir)
-
-    r_pred, q_pred = self.get_model_prediction(img)
-    # print("Predicted: ", r, q)
-
-    df = pd.read_csv(os.path.join(self.root_frames_dir, ("seq_RT" + n_traj), ("seq_RT" + n_traj + ".csv")))
-    label = df.loc[df['filename'] == img_name]
-    if label.empty:
-        print(f"Image {img_name} not found in the DataFrame.")
-        return  # Exit the function if no matching row is found
-
-    x = label.iloc[0]['Tx']
-    y = label.iloc[0]['Ty']
-    z = label.iloc[0]['Tz']
-    qx = label.iloc[0]['Qx']
-    qy = label.iloc[0]['Qy']
-    qz = label.iloc[0]['Qz']
-    qw = label.iloc[0]['Qw']
-
-    r_label = np.array([x, y, z])
-    q_label = np.array([qx, qy, qz, qw])
-    # print("Label: ", r, q)
-
-    self.visualize_both(img, q_label, r_label, q_pred, r_pred, ax)
-    plt.savefig(os.path.join(self.dest_dir, img_name))
-    plt.close()
-    return q_label, r_label, q_pred, r_pred
+    update_plot(index)  # Show the first image
+    plt.show()  # Keep the plot open until manually closed
