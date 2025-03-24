@@ -10,6 +10,7 @@ from wandb.integration.keras import WandbMetricsLogger, WandbModelCheckpoint
 
 from src.dataloaders.spades import CreateDF, create_dataset
 from src.losses.poseloss import PoseEstimationLoss
+from src.losses.betaloss import BetaLoss
 from src.models.mobilenet import MobilenetModel
 
 if __name__ == '__main__':
@@ -89,6 +90,7 @@ if __name__ == '__main__':
     # Training Loop
     model.compile(loss=PoseEstimationLoss(),
                   optimizer=optimizer)
+    # model.compile(optimizer=BetaLoss(beta=2)) # check beta = {2, 5, 10, 20}
 
     steps_per_epoch = len(train_df) // cfg.training.batch_size  # Calculate steps per epoch
     validation_steps = len(val_df) // cfg.training.batch_size
