@@ -26,16 +26,17 @@ def MobilenetModel(input_size, pretrained=False):
     x = tf.keras.layers.GlobalAveragePooling2D()(x)
 
     px = dense_block(x, units=512, name='fcp1', add_batchnorm=True, relu_activation='ReLU7.5')
-    px = Dropout(0.5, name='dropout_p')(px)
+    # px = Dropout(0.5, name='dropout_p')(px)
     px = dense_block(px, units=256, name='fcp2', add_batchnorm=True, relu_activation='ReLU7.5')
     position_output = dense_block(px, units=3, name='position_output', add_batchnorm=False, relu_activation=False)
 
     qx = dense_block(x, units=512, name='fcq1', add_batchnorm=True, relu_activation='ReLU7.5')
-    qx = Dropout(0.5, name='dropout_q')(qx)
+    # qx = Dropout(0.5, name='dropout_q')(qx)
     qx = dense_block(qx, units=256, name='fcq2', add_batchnorm=True, relu_activation='ReLU7.5')
     quat_output = dense_block(qx, units=4, name='orientation_output', add_batchnorm=False, relu_activation=False)
+    stacked_output = tf.keras.layers.Concatenate(axis=-1)([position_output, quat_output])
 
-    model = tf.keras.Model(inputs=inputs, outputs=[position_output, quat_output], name="MobilenetPoseEstimation")
+    model = tf.keras.Model(inputs=inputs, outputs=stacked_output, name="MobilenetPoseEstimation")
     return model
 
 

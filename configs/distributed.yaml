@@ -1,9 +1,9 @@
 id: mobilenet_lnes_syn
 root:
-  dataset: "/home/arunkumar/datasets/SPADES"
-  data_out: "/home/arunkumar/datasets/SPADES/synthetic"
-  checkpoint: "/home/arunkumar/experiments/SPADES/${id}"
-  test_data: "/home/arunkumar/datasets/SPADES/synthetic/val.csv"
+  dataset: "/mnt/isilon/space_cluster/SPADES"
+  data_out: "/mnt/isilon/space_cluster/SPADES/synthetic"
+  checkpoint: "/home/arathinam/experiments/SPADES/${id}"
+  test_data: "/mnt/isilon/space_cluster/SPADES/synthetic/val.csv"
 
 filter:
   method: "get_distribution"
@@ -30,7 +30,7 @@ training:
 
 model:
   pretrained: False
-  trained_weights: /home/arunkumar/experiments/SPADES/mobilenet_lnes_syn/20250327_115948/model_26_4.3128.keras
+  trained_weights:
 
 wandb:
   status: 'online'

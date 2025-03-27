@@ -42,9 +42,9 @@ class PoseInference:
     def get_model_prediction(self, filepath):
         """ Get model prediction for the input image """
         img = self._load_image(filepath)
-        pred_pos, pred_quat = self.model.predict(img)
-        pred_quat = tf.linalg.normalize(pred_quat, axis=-1)[0]
-        return np.array(pred_pos).squeeze(), np.array(pred_quat).squeeze()
+        pred = self.model.predict(img)
+        pred_quat = tf.linalg.normalize(pred[:, 3:], axis=-1)[0]
+        return np.array(pred[:, :3]).squeeze(), np.array(pred_quat).squeeze()
 
 
 if __name__ == '__main__':
@@ -61,42 +61,32 @@ if __name__ == '__main__':
         print("Error loading YAML:", e)
 
     infer = PoseInference(cfg=config)
-    data_root = str(os.path.join(config.root.dataset, config.data.source, config.data.transformation))
 
-    with open(config.root.test_data, "r") as file:
-        reader = csv.reader(file)
-        test_data = list(reader)
+    df = pd.read_csv(config.root.test_data)
 
-    for file_name in test_data:
-        # print(file_name)
-        index = 0
-        img_list = []
-        gt_q_list = []
-        gt_r_list = []
-        pred_q_list = []
-        pred_r_list = []
+    img_list = []
+    gt_q_list = []
+    gt_r_list = []
+    pred_q_list = []
+    pred_r_list = []
 
-        seq = file_name[0].split('.')[0]
-        df = pd.read_csv(os.path.join(config.root.data_out, 'labels', file_name[0]))
-        for img_path in sorted(glob.glob(os.path.join(data_root, seq, '*.png'))):
-            img_id = os.path.basename(img_path)
-            # print(img_path)
-            pred_r, pred_q = infer.get_model_prediction(img_path)
-            data = df.loc[df['filename'] == img_id]
-            gt_r = np.array(data[['Tx', 'Ty', 'Tz']]).squeeze()
-            gt_q = np.array(data[['Qx', 'Qy', 'Qz', 'Qw']]).squeeze()
-            img = cv2.imread(img_path)
-            img_list.append(img)
-            gt_q_list.append(gt_q)
-            gt_r_list.append(gt_r)
-            pred_q_list.append(pred_q)
-            pred_r_list.append(pred_r)
-            index += 1
-            if index % 100 == 0:
-                visualize_both(img_list, gt_q_list, gt_r_list, pred_q_list, pred_r_list, K)
-                index = 0
-                img_list = []
-                gt_q_list = []
-                gt_r_list = []
-                pred_q_list = []
-                pred_r_list = []
+    for index, row in df.iterrows():
+        pred_r, pred_q = infer.get_model_prediction(row['filepath'])
+        gt_r = np.array(row[['Tx', 'Ty', 'Tz']], dtype=np.float64)
+        gt_q = np.array(row[['Qx', 'Qy', 'Qz', 'Qw']], dtype=np.float64)
+        print(pred_r, gt_r)
+        print(pred_q, gt_q)
+        img = cv2.imread(row['filepath'])
+        img_list.append(img)
+        gt_q_list.append(gt_q)
+        gt_r_list.append(gt_r)
+        pred_q_list.append(pred_q)
+        pred_r_list.append(pred_r)
+        if index > 1 and index % 100 == 0:
+            print(gt_r_list)
+            visualize_both(img_list, gt_q_list, gt_r_list, pred_q_list, pred_r_list, K)
+            img_list = []
+            gt_q_list = []
+            gt_r_list = []
+            pred_q_list = []
+            pred_r_list = []

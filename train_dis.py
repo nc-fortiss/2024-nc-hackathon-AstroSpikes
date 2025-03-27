@@ -13,7 +13,7 @@ from src.models.mobilenet import MobilenetModel
 
 if __name__ == '__main__':
     # loading omegaconf
-    config_path = "configs/mobilenet.yaml"
+    config_path = "configs/distributed.yaml"
     try:
         cfg = OmegaConf.load(config_path)
     except Exception as e:
@@ -81,20 +81,22 @@ if __name__ == '__main__':
         decay_rate=decay_rate,
         staircase=True)
 
-    optimizer = tf.keras.optimizers.Adam(learning_rate=lr_schedule)
+    mirrored_strategy = tf.distribute.MirroredStrategy()
 
-    # Initialize model.
-    model = MobilenetModel(input_size=list(cfg.data.input_size), pretrained=cfg.model.pretrained)
-    model.build(input_shape=(None, *list(cfg.data.input_size)))  # None is for batch size
+    with mirrored_strategy.scope():
+        # Initialize model.
+        model = MobilenetModel(input_size=list(cfg.data.input_size), pretrained=cfg.model.pretrained)
+        # model.build(input_shape=(None, *list(cfg.data.input_size)))  # None is for batch size
+        optimizer = tf.keras.optimizers.Adam(learning_rate=lr_schedule)
+        # Training Loop
+        model.compile(loss=PoseEstimationLoss(),
+                      optimizer=optimizer,
+                      metrics=[position_loss, geodesic_loss]
+                      )
+
     wandb.log({"model_summary": model.summary()})
     print(OmegaConf.to_yaml(cfg))
     print('Exp_ID:', exp_folder)
-
-    # Training Loop
-    model.compile(loss=PoseEstimationLoss(),
-                  optimizer=optimizer,
-                  metrics=[position_loss, geodesic_loss]
-                  )
 
     # model.compile(loss=BetaLoss(), optimizer=optimizer)  # check beta = {2, 5, 10, 20}
     steps_per_epoch = len(train_data[next(iter(train_data))]) // cfg.training.batch_size  # Calculate steps per epoch
