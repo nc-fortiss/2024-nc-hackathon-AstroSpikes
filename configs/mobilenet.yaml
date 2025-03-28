@@ -30,7 +30,7 @@ training:
 
 model:
   pretrained: False
-  trained_weights: /home/arunkumar/experiments/SPADES/mobilenet_lnes_syn/20250327_115948/model_26_4.3128.keras
+  trained_weights:
 
 wandb:
   status: 'online'

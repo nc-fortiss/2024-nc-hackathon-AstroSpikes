@@ -34,12 +34,12 @@ def create_dataset(data: dict, batch_size: int, input_size: Tuple[int, int],
     def _process_data(item):
         """Process each item: load image and stack positions/quaternions"""
         image = _load_and_preprocess(item["filepath"])
-        # position = tf.stack([item["Tx"], item["Ty"], item["Tz"]], axis=-1)
-        # quaternion = tf.stack([item["Qx"], item["Qy"], item["Qz"], item["Qw"]], axis=-1)
+        position = tf.stack([item["Tx"], item["Ty"], item["Tz"]], axis=-1)
+        quaternion = tf.stack([item["Qx"], item["Qy"], item["Qz"], item["Qw"]], axis=-1)
         # # Stack position and quaternion into a single tensor
         # labels = tf.concat([position, quaternion], axis=-1)
-        labels = tf.stack([item["Tx"], item["Ty"], item["Tz"], item["Qx"], item["Qy"], item["Qz"], item["Qw"]], axis=-1)
-        return image, labels
+        # labels = tf.stack([item["Tx"], item["Ty"], item["Tz"], item["Qx"], item["Qy"], item["Qz"], item["Qw"]], axis=-1)
+        return image, (position, quaternion)
 
     # Create a tf.data.Dataset from the filepaths and individual label tensors
     dataset = tf.data.Dataset.from_tensor_slices(data)

@@ -6,9 +6,10 @@ import wandb
 from omegaconf import OmegaConf
 from tensorflow.keras.callbacks import ModelCheckpoint
 from wandb.integration.keras import WandbMetricsLogger
+import glob
 
 from src.dataloaders.spades import create_dataset
-from src.losses.poseloss import PoseEstimationLoss, position_loss, geodesic_loss
+from src.losses.poseloss import geodesic_dist, position_mse_loss, quat_rel_angle
 from src.models.mobilenet import MobilenetModel
 
 if __name__ == '__main__':
@@ -33,6 +34,13 @@ if __name__ == '__main__':
                      mode=cfg.wandb.status,
                      )
     wandb.log({'config': str(wandb.config)})
+    if cfg.wandb.status == 'online':
+        code = wandb.Artifact('project-source', type='code')
+        for path in glob.glob('**/*.py', recursive=True):
+            code.add_file(path)
+        for path in glob.glob('**/*.yaml', recursive=True):
+            code.add_file(path)
+        wandb.run.use_artifact(code)
 
     # Setup WandbModelCheckpoint
     model_name = "model_{epoch:02d}_{val_loss:.4f}.keras"
@@ -81,6 +89,23 @@ if __name__ == '__main__':
         decay_rate=decay_rate,
         staircase=True)
 
+    # Define loss functions
+    losses = {
+        "position": position_mse_loss,
+        "orientation": geodesic_dist
+    }
+
+    # Assign different importance to losses
+    loss_weights_dict = {
+        "position": 0.2,
+        "orientation": 0.8
+    }
+
+    metrics_dict = {
+        "position": ["mae"],  # Two metrics for position
+        "orientation": quat_rel_angle  # Only MSE for orientation
+    }
+
     mirrored_strategy = tf.distribute.MirroredStrategy()
 
     with mirrored_strategy.scope():
@@ -89,9 +114,10 @@ if __name__ == '__main__':
         # model.build(input_shape=(None, *list(cfg.data.input_size)))  # None is for batch size
         optimizer = tf.keras.optimizers.Adam(learning_rate=lr_schedule)
         # Training Loop
-        model.compile(loss=PoseEstimationLoss(),
+        model.compile(loss=losses,
+                      loss_weights=loss_weights_dict,
                       optimizer=optimizer,
-                      metrics=[position_loss, geodesic_loss]
+                      metrics=metrics_dict
                       )
 
     wandb.log({"model_summary": model.summary()})

@@ -6,9 +6,10 @@ import wandb
 from omegaconf import OmegaConf
 from tensorflow.keras.callbacks import ModelCheckpoint
 from wandb.integration.keras import WandbMetricsLogger
+import glob
 
 from src.dataloaders.spades import create_dataset
-from src.losses.poseloss import PoseEstimationLoss, position_loss, geodesic_loss
+from src.losses.poseloss import position_mse_loss, quat_rel_angle, geodesic_dist
 from src.models.mobilenet import MobilenetModel
 
 if __name__ == '__main__':
@@ -30,9 +31,17 @@ if __name__ == '__main__':
                      dir=checkpoint_dir,
                      name=cfg.wandb.exp_id,
                      config=OmegaConf.to_container(cfg, resolve=True),
-                     mode=cfg.wandb.status,
+                     mode=cfg.wandb.status
                      )
     wandb.log({'config': str(wandb.config)})
+
+    if cfg.wandb.status == 'online':
+        code = wandb.Artifact('project-source', type='code')
+        for path in glob.glob('**/*.py', recursive=True):
+            code.add_file(path)
+        for path in glob.glob('**/*.yaml', recursive=True):
+            code.add_file(path)
+        wandb.run.use_artifact(code)
 
     # Setup WandbModelCheckpoint
     model_name = "model_{epoch:02d}_{val_loss:.4f}.keras"
@@ -90,10 +99,27 @@ if __name__ == '__main__':
     print(OmegaConf.to_yaml(cfg))
     print('Exp_ID:', exp_folder)
 
+    # Define loss functions
+    losses = {
+        "position": position_mse_loss,
+        "orientation": geodesic_dist
+    }
+
+    # Assign different importance to losses
+    loss_weights_dict = {
+        "position": 0.2,
+        "orientation": 0.8
+    }
+
+    metrics_dict = {
+        "position": ["mae"],  # Two metrics for position
+        "orientation": quat_rel_angle  # Only MSE for orientation
+    }
     # Training Loop
-    model.compile(loss=PoseEstimationLoss(),
+    model.compile(loss=losses,
+                  loss_weights=loss_weights_dict,
                   optimizer=optimizer,
-                  metrics=[position_loss, geodesic_loss]
+                  metrics=metrics_dict
                   )
 
     # model.compile(loss=BetaLoss(), optimizer=optimizer)  # check beta = {2, 5, 10, 20}
