@@ -9,7 +9,7 @@ def position_l2_loss(target_pos, pred_pos):
 
 
 def position_mse_loss(target_pos, pred_pos):
-    mse_loss = tf.keras.losses.MeanSquaredError()(target_pos, pred_pos)
+    mse_loss = tf.keras.losses.MeanSquaredError(reduction=tf.keras.losses.Reduction.SUM)(target_pos, pred_pos)
     return mse_loss
 
 

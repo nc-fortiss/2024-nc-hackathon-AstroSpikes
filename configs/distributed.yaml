@@ -1,4 +1,5 @@
 id: mobilenet_lnes_syn
+project_id: mobilenet-astrospikes
 root:
   dataset: "/mnt/isilon/space_cluster/SPADES"
   data_out: "/mnt/isilon/space_cluster/SPADES/synthetic"
@@ -21,10 +22,10 @@ data:
 
 training:
   lr: 1e-4
-  num_epochs: 100
+  num_epochs: 300
   beta_epochs: 5
   verbose: 0
-  batch_size: 24
+  batch_size: 32
   log_Step: 1
   val_log_Step: 1
 
@@ -34,4 +35,4 @@ model:
 
 wandb:
   status: 'online'
-  exp_id: 'ak_mobnet_lnes_train_alpha_n_loss'
+  exp_id: 'ak_mobnet_lnes_dual_branch_trainable_alpha'

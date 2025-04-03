@@ -12,6 +12,13 @@ from src.dataloaders.spades import create_dataset
 from src.losses.poseloss import position_mse_loss, quat_rel_angle, geodesic_dist
 from src.models.mobilenet import MobilenetModel
 
+
+class LossWeightUpdater(tf.keras.callbacks.Callback):
+    def on_epoch_end(self, epoch, logs=None):
+        loss_weights_dict["position"] = alpha.numpy()
+        loss_weights_dict["orientation"] = 1.0 - alpha.numpy()
+
+
 if __name__ == '__main__':
     # loading omegaconf
     config_path = "configs/mobilenet.yaml"
@@ -27,7 +34,7 @@ if __name__ == '__main__':
     # wandb.tensorboard.patch(root_logdir=logdir)
 
     # initialize wandb
-    run = wandb.init(project="mobilenet-astrospikes",
+    run = wandb.init(project=cfg.wandb.project_id,
                      dir=checkpoint_dir,
                      name=cfg.wandb.exp_id,
                      config=OmegaConf.to_container(cfg, resolve=True),
@@ -106,9 +113,11 @@ if __name__ == '__main__':
     }
 
     # Assign different importance to losses
+    alpha = tf.Variable(0.1, trainable=True, dtype=tf.float32,
+                        constraint=lambda x: tf.clip_by_value(x, 0.01, 1.0))
     loss_weights_dict = {
-        "position": 0.2,
-        "orientation": 0.8
+        "position": tf.keras.backend.get_value(alpha),
+        "orientation": 1.0 - tf.keras.backend.get_value(alpha)
     }
 
     metrics_dict = {
@@ -130,7 +139,7 @@ if __name__ == '__main__':
               epochs=cfg.training.num_epochs,
               batch_size=cfg.training.batch_size,
               steps_per_epoch=steps_per_epoch,
-              callbacks=[checkpoint_callback, wml],
+              callbacks=[checkpoint_callback, wml, LossWeightUpdater()],
               validation_data=val_dataset,
               validation_steps=validation_steps,
               use_multiprocessing=True)

@@ -1,4 +1,5 @@
 id: mobilenet_lnes_syn
+project_id: mobilenet-astrospikes
 root:
   dataset: "/home/arunkumar/datasets/SPADES"
   data_out: "/home/arunkumar/datasets/SPADES/synthetic"
@@ -21,7 +22,7 @@ data:
 
 training:
   lr: 1e-4
-  num_epochs: 100
+  num_epochs: 300
   beta_epochs: 5
   verbose: 0
   batch_size: 16

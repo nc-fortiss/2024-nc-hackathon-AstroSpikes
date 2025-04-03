@@ -42,9 +42,9 @@ class PoseInference:
     def get_model_prediction(self, filepath):
         """ Get model prediction for the input image """
         img = self._load_image(filepath)
-        pred = self.model.predict(img)
-        pred_quat = tf.linalg.normalize(pred[:, 3:], axis=-1)[0]
-        return np.array(pred[:, :3]).squeeze(), np.array(pred_quat).squeeze()
+        pos, rot = self.model.predict(img)
+        pred_quat = tf.linalg.normalize(rot, axis=-1)[0]
+        return np.array(pos).squeeze(), np.array(pred_quat).squeeze()
 
 
 if __name__ == '__main__':
@@ -74,8 +74,8 @@ if __name__ == '__main__':
         pred_r, pred_q = infer.get_model_prediction(row['filepath'])
         gt_r = np.array(row[['Tx', 'Ty', 'Tz']], dtype=np.float64)
         gt_q = np.array(row[['Qx', 'Qy', 'Qz', 'Qw']], dtype=np.float64)
-        print(pred_r, gt_r)
-        print(pred_q, gt_q)
+        print(f"\nTranslation-Pred: {pred_r}, GT: {gt_r}")
+        print(f"\nRotation-Pred: {pred_q}, GT: {gt_q}")
         img = cv2.imread(row['filepath'])
         img_list.append(img)
         gt_q_list.append(gt_q)
