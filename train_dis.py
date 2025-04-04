@@ -9,7 +9,7 @@ from wandb.integration.keras import WandbMetricsLogger
 import glob
 
 from src.dataloaders.spades import create_dataset
-from src.losses.poseloss import geodesic_dist, position_mse_loss, quat_rel_angle
+from src.losses.poseloss import geodesic_dist, position_mse_loss, ori_error, rel_l2_error
 from src.models.mobilenet import MobilenetModel
 
 
@@ -111,8 +111,8 @@ if __name__ == '__main__':
     }
 
     metrics_dict = {
-        "position": ["mae"],  # Two metrics for position
-        "orientation": quat_rel_angle  # Only MSE for orientation
+        "position": rel_l2_error,  # Two metrics for position
+        "orientation": ori_error  # Only MSE for orientation
     }
 
     mirrored_strategy = tf.distribute.MirroredStrategy()
