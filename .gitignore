@@ -14,3 +14,5 @@ wandb/
 extras/*
 /logs/
 logs/*
+/tmp/
+tmp/*

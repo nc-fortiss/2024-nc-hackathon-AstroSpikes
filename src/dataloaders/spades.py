@@ -55,7 +55,10 @@ def create_dataset(data: dict, batch_size: int, input_size: Tuple[int, int],
         cache_file = os.path.join(cache_dir, "dataset_cache")
         dataset = dataset.cache(cache_file)
 
-    dataset = dataset.batch(batch_size, drop_remainder=True)
+    if is_training:
+        dataset = dataset.batch(batch_size, drop_remainder=True)
+    else:
+        dataset = dataset.batch(batch_size)
     dataset = dataset.prefetch(tf.data.AUTOTUNE)
 
     return dataset

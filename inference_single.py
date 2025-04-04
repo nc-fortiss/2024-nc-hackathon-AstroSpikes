@@ -70,12 +70,20 @@ if __name__ == '__main__':
     pred_q_list = []
     pred_r_list = []
 
+    results = []
+
     for index, row in df.iterrows():
         pred_r, pred_q = infer.get_model_prediction(row['filepath'])
+        results.append([
+            row['filepath'],
+            pred_r[0], pred_r[1], pred_r[2],
+            pred_q[0], pred_q[1], pred_q[2], pred_q[3]
+        ])
+
         gt_r = np.array(row[['Tx', 'Ty', 'Tz']], dtype=np.float64)
         gt_q = np.array(row[['Qx', 'Qy', 'Qz', 'Qw']], dtype=np.float64)
-        print(f"\nTranslation-Pred: {pred_r}, GT: {gt_r}")
-        print(f"\nRotation-Pred: {pred_q}, GT: {gt_q}")
+        # print(f"\nTranslation-Pred: {pred_r}, GT: {gt_r}")
+        # print(f"\nRotation-Pred: {pred_q}, GT: {gt_q}")
         img = cv2.imread(row['filepath'])
         img_list.append(img)
         gt_q_list.append(gt_q)
@@ -83,10 +91,17 @@ if __name__ == '__main__':
         pred_q_list.append(pred_q)
         pred_r_list.append(pred_r)
         if index > 1 and index % 100 == 0:
-            print(gt_r_list)
+            # print(gt_r_list)
             visualize_both(img_list, gt_q_list, gt_r_list, pred_q_list, pred_r_list, K)
             img_list = []
             gt_q_list = []
             gt_r_list = []
             pred_q_list = []
             pred_r_list = []
+
+    # Convert to a DataFrame
+    pred_df = pd.DataFrame(results, columns=[
+        'filepath', 'Tx', 'Ty', 'Tz', 'Qx', 'Qy', 'Qz', 'Qw'
+    ])
+    # Write to CSV
+    pred_df.to_csv("predictions.csv", index=False)
