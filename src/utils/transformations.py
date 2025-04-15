@@ -6,22 +6,21 @@ from tonic import transforms
 class Transformations:
     def __init__(self, cfg: DictConfig):
         self.config = cfg
-        self.img_size = cfg.data.input_size[0]
+        self.img_size = cfg.data.input_size
 
     def three_c_representation(self, events):  # working
-        print(transforms)
         transform = transforms.Compose([
             transforms.MergePolarities(),
-            transforms.CenterCrop(sensor_size=(1280, 720, 1), size=(720, 720)),
-            transforms.Downsample(spatial_factor=self.img_size / 720),
-            transforms.ToTimesurface(sensor_size=(self.img_size, self.img_size, 1), dt=333, tau=200)
+            #transforms.CenterCrop(sensor_size=(1280, 720, 1), size=(720, 720)),
+            transforms.Downsample(spatial_factor=(self.img_size[0]/1280,self.img_size[1]/720)),
+            transforms.ToTimesurface(sensor_size=(self.img_size[0], self.img_size[1], 1), dt=333, tau=200)
         ])
         transformed_events = transform(events)
         # create frames from the transformed events
         ret = []
         for frame in range(0, (len(transformed_events) // 3) * 3, 3):
             # empty frame
-            rgb_frame = np.zeros(self.config.input_shape, dtype=np.uint8)
+            rgb_frame = np.zeros((self.img_size[1], self.img_size[0],3), dtype=np.uint8)
             # stack 3 frames into 3 channels
             # scale [0,1] to [0,255]
             rgb_frame[:, :, 0] = transformed_events[frame] * 255
@@ -33,15 +32,15 @@ class Transformations:
     def to_voxel_grid(self, events):  # working
         transform = transforms.Compose([
             transforms.MergePolarities(),
-            transforms.CenterCrop(sensor_size=(1280, 720, 1), size=(720, 720)),
-            transforms.Downsample(spatial_factor=self.img_size / 720),
-            transforms.ToVoxelGrid(sensor_size=(self.img_size, self.img_size, 2), n_time_bins=600)
+            #transforms.CenterCrop(sensor_size=(1280, 720, 1), size=(720, 720)),
+            transforms.Downsample(spatial_factor=(self.img_size[0]/1280,self.img_size[1]/720)),
+            transforms.ToVoxelGrid(sensor_size=(self.img_size[0], self.img_size[1], 2), n_time_bins=600)
         ])
         t_events = transform(events)
         ret = []
         for frame in range(0, len(t_events)):
             # empty frame
-            rgb_frame = np.zeros((self.img_size, self.img_size, 3), dtype=np.uint8)
+            rgb_frame = np.zeros((self.img_size[1], self.img_size[0],3), dtype=np.uint8)
             # scale [0,1] to [0,255]
             rgb_frame[:, :, 0] = t_events[frame] * 255
             ret.append(rgb_frame)
@@ -51,8 +50,8 @@ class Transformations:
         transform = transforms.Compose([
             transforms.MergePolarities(),
             transforms.CenterCrop(sensor_size=(1280, 720, 1), size=(720, 720)),
-            transforms.Downsample(spatial_factor=self.img_size / 720),
-            transforms.ToTimesurface(dt=1000, tau=200, sensor_size=(self.img_size, self.img_size, 1))
+            transforms.Downsample(spatial_factor=(self.img_size[0]/1280,self.img_size[1]/720)),
+            transforms.ToTimesurface(dt=1000, tau=200, sensor_size=(self.img_size[0], self.img_size[1], 1))
         ])
 
         events_positive = events[events['p'] == 1]
@@ -63,7 +62,7 @@ class Transformations:
 
         for frame in range(0, min(len(t_negative_events), len(t_positive_events))):
             # empty frame
-            rgb_frame = np.zeros(self.config.input_shape, dtype=np.uint8)
+            rgb_frame = np.zeros((self.img_size[1], self.img_size[0],3), dtype=np.uint8)
             # stack 3 frames into 3 channels
             # scale [0,1] to [0,255]
             rgb_frame[:, :, 0] = t_positive_events[frame] * 255
@@ -74,15 +73,15 @@ class Transformations:
     def two_d_histogram(self, events):  # working
         transform = transforms.Compose([
             transforms.MergePolarities(),
-            transforms.CenterCrop(sensor_size=(1280, 720, 1), size=(720, 720)),
-            transforms.Downsample(spatial_factor=self.img_size / 720),
-            transforms.ToFrame(sensor_size=(self.img_size, self.img_size, 1), n_time_bins=600)
+            #transforms.CenterCrop(sensor_size=(1280, 720, 1), size=(720, 720)),
+            transforms.Downsample(spatial_factor=(self.img_size[0]/1280,self.img_size[1]/720)),
+            transforms.ToFrame(sensor_size=(self.img_size[0], self.img_size[1], 1), n_time_bins=600)
         ])
         t_events = transform(events)
         ret = []
         for frame in range(0, len(t_events)):
             # empty frame
-            rgb_frame = np.zeros(self.config.input_shape, dtype=np.uint8)
+            rgb_frame = np.zeros((self.img_size[1], self.img_size[0], self.img_size[2]), dtype=np.uint8)
             # scale [0,1] to [0,255]
             rgb_frame[:, :, 0] = t_events[frame] * 255
             ret.append(rgb_frame)
@@ -105,7 +104,7 @@ class Transformations:
         n_time_bins = int((t_end - t_start) // intervalLength) + 1
 
         # Pre-allocate output array (n_time_bins, 240, 240, 3)
-        ret = np.zeros((n_time_bins, 1280, 720, self.config.data.input_size[2]), dtype=np.float32)
+        ret = np.zeros((n_time_bins, 1280, 720, self.img_size[2]), dtype=np.float32)
         # ret = np.zeros((n_time_bins, self.img_size, self.img_size, self.config.data.input_size[2]), dtype=np.float32)
 
         # Assign events to time bins
