@@ -10,7 +10,8 @@ import glob
 
 from src.dataloaders.spades import create_dataset
 from src.losses.poseloss import geodesic_dist, position_mse_loss, ori_error, rel_l2_error
-from src.models.mobilenet import MobilenetModel
+from src.models.mobilenet_regression import MobilenetModel_regression
+from src.models.mobilenet_heatmap import mobilenet_heatmap
 
 
 class LossWeightUpdater(tf.keras.callbacks.Callback):
@@ -100,7 +101,7 @@ if __name__ == '__main__':
     optimizer = tf.keras.optimizers.Adam(learning_rate=lr_schedule)
 
     # Initialize model.
-    model = MobilenetModel(input_size=list(cfg.data.input_size), pretrained=cfg.model.pretrained)
+    model = MobilenetModel_regression(input_shape=list(cfg.data.input_size), pretrained=cfg.model.pretrained)
     model.build(input_shape=(None, *list(cfg.data.input_size)))  # None is for batch size
     wandb.log({"model_summary": model.summary()})
     print(OmegaConf.to_yaml(cfg))
