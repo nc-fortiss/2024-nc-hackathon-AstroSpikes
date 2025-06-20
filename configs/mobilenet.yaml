@@ -1,9 +1,10 @@
 id: fortiss_mobilenet_two_d_histogram_syn
 root:
-  dataset: "/home/arunkumar/datasets/SPADES"
-  data_out: "/home/arunkumar/datasets/SPADES/synthetic"
-  checkpoint: "/home/arunkumar/experiments/SPADES/${id}"
-  test_data: "/home/arunkumar/datasets/SPADES/synthetic/val.csv"
+  labels: '/home/lecomte/AstroSpikes/SPADES/spades_label'
+  dataset: "/home/lecomte/AstroSpikes/SPADES/synthetic"
+  data_out: "/home/lecomte/AstroSpikes/SPADES/synthetic"
+  checkpoint: "/home/lecomte/experiments/SPADES/${id}"
+  test_data: "/home/lecomte/datasets/SPADES/synthetic/val.csv"
 
 filter:
   method: "get_distribution"
@@ -16,7 +17,7 @@ filter:
 data:
   transformation: "lnes"
   source: "synthetic"
-  input_size: [640, 360, 3]
+  input_size: [1280, 720, 3]
   test_split: 0.2
 
 training:
@@ -29,6 +30,7 @@ training:
   val_log_Step: 1
 
 model:
+  heatmap: False
   pretrained: False
   trained_weights: /home/arunkumar/experiments/SPADES/mobilenet_lnes_syn/model_280_0.0921.keras
 

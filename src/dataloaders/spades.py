@@ -1,5 +1,6 @@
 import os
 from typing import Tuple
+import json
 
 import pandas as pd
 import tensorflow as tf
@@ -8,6 +9,7 @@ from omegaconf import OmegaConf
 
 def create_dataset(data: dict, batch_size: int, input_size: Tuple[int, int],
                    is_training: bool = True,
+                   heatmap: bool = True,
                    cache_dir: str = None) -> tf.data.Dataset:
     """
     Creates a TensorFlow Dataset from a Pandas DataFrame for large datasets, optimizing memory usage.
@@ -27,18 +29,23 @@ def create_dataset(data: dict, batch_size: int, input_size: Tuple[int, int],
         """Loads, preprocesses, and converts a single image to a tensor."""
         image = tf.io.read_file(filepath)
         image = tf.image.decode_jpeg(image, channels=3)  # Or decode_png, depending on your image format
-        image = tf.image.resize(image, input_size)
+        #image = tf.image.resize(image, input_size)
         image = tf.image.convert_image_dtype(image, dtype=tf.float32)  # Normalize to [0, 1]
         return image
 
     def _process_data(item):
         """Process each item: load image and stack positions/quaternions"""
         image = _load_and_preprocess(item["filepath"])
-        position = tf.stack([item["Tx"], item["Ty"], item["Tz"]], axis=-1)
-        quaternion = tf.stack([item["Qx"], item["Qy"], item["Qz"], item["Qw"]], axis=-1)
-        return image, (position, quaternion)
+        positions = []
+        for i in range(8) :
+            positions.append([item[f'k{i}x'], item[f'k{i}y']])
+        positions = tf.reshape(tf.stack(positions, axis=-1), [2,8]) if heatmap else positions = tf.reshape(tf.stack(positions, axis=-1), [16])
+        return image, positions
 
     # Create a tf.data.Dataset from the filepaths and individual label tensors
+    # New version with json file
+    #with open(data) as json_file:
+    #    datadict = json.load(json_file)
     dataset = tf.data.Dataset.from_tensor_slices(data)
 
     if is_training:
@@ -63,12 +70,13 @@ def create_dataset(data: dict, batch_size: int, input_size: Tuple[int, int],
 
 if __name__ == '__main__':
 
-    config_path = "/home/arunkumar/dev-python/2024-nc-hackathon-AstroSpikes/configs/mobilenet.yaml"
+    config_path = "/home/lecomte/AstroSpikes/2024-nc-hackathon-AstroSpikes/configs/mobilenet.yaml"
     try:
         cfg = OmegaConf.load(config_path)
     except Exception as e:
         print("Error loading YAML:", e)
-    train_df = pd.read_csv(os.path.join(cfg.root.data_out, 'train.csv'))
+    print(os.path.join(cfg.root.data_out, 'lnes_cropped/val/keypoints.csv'))
+    train_df = pd.read_csv(os.path.join(cfg.root.data_out, 'lnes_cropped/val/keypoints.csv'))
     # Convert DataFrame to a dictionary of NumPy arrays
     train_data = {col: train_df[col].values for col in train_df.columns}
 

@@ -36,7 +36,10 @@ from akida_models.imagenet.imagenet_utils import obtain_input_shape
 from akida_models.layer_blocks import conv_block, separable_conv_block, dense_block
 from akida_models.utils import fetch_file, get_params_by_version
 from akida_models.model_io import load_model, get_model_path
-
+import akida_models.imagenet.model_mobilenet as mobilenet
+import tensorflow as tf
+from cnn2snn import set_akida_version, AkidaVersion
+import dsnt
 
 def mobilenet_heatmap(input_shape=None,
                        alpha=1.0,
@@ -271,18 +274,14 @@ def mobilenet_heatmap(input_shape=None,
 
     x = separable_conv_block(x,
                              filters=int(8 * alpha),
-                             name='separable_12',
+                             name='position',
                              kernel_size=(3, 3),
                              padding='same',
                              pooling=None,
                              strides=1,#strides,
                              use_bias=False,
-                             add_batchnorm=True,
-                             relu_activation=relu_activation,
-                             fused=fused,
-                             pointwise_regularizer=weight_regularizer)
-
-
+                             add_batchnorm=False,
+                             relu_activation=False)
     if include_top:
         x = Dropout(dropout, name='dropout')(x)
         x = dense_block(x,
@@ -355,3 +354,32 @@ def mobilenet_imagenet_pretrained(alpha=1.0, quantized=True):
                             file_hash=file_hash,
                             cache_subdir='models')
     return load_model(model_path)
+
+
+def MobilenetModelHeatmap(input_shape, pretrained=False):
+    with set_akida_version(AkidaVersion.v1):
+        if pretrained:
+            base_model = mobilenet_imagenet_pretrained(alpha=1.0, quantized=False)
+        else:
+            base_model = mobilenet_heatmap(input_shape=input_shape, alpha=1.0, include_top=False,
+                                                      input_scaling=None)
+
+    # Extract feature extractor layers
+    feature_extractor = tf.keras.Model(inputs=base_model.input, outputs=base_model.output,
+                                       name="feature_extractor")
+    feature_extractor.trainable = True
+
+    # Input layer
+    inputs = tf.keras.Input(shape=input_shape, name="image_input")
+
+    # Feature extraction
+    x = feature_extractor(inputs)
+    x = tf.keras.layers.GlobalAveragePooling2D()(x)
+
+    px = dense_block(x, units=512, name='fcp1', add_batchnorm=True, relu_activation='ReLU7.5')
+    # px = Dropout(0.5, name='dropout_p')(px)
+    px = dense_block(px, units=256, name='fcp2', add_batchnorm=True, relu_activation='ReLU7.5')
+    position_output = dense_block(px, units=16, name='position', add_batchnorm=False, relu_activation=False)
+
+    model = tf.keras.Model(inputs=inputs, outputs=[position_output], name="MobilenetPoseEstimation")
+    return model

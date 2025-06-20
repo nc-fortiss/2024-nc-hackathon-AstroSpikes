@@ -1,6 +1,7 @@
 data
 .DS_store
 *.out
+dsnt/*
 *.keras
 *.sif
 visualizations/*.png

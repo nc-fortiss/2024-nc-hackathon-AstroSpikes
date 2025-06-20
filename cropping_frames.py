@@ -56,7 +56,7 @@ class DatasetGenerator():
         columns = ['filepath'] + [f'k{i}x' for i in range(8)] + [f'k{i}y' for i in range(8)]
         train_df = pd.DataFrame(columns=columns)
 
-        for index, row in self.train.iterrows():
+        for index, row in self.val.iterrows():
             filename = row['filename']
             keypoints = np.array(row['keypoints'])
             keypoints = np.array(keypoints).reshape(-1, 3)[:, :2]
@@ -71,7 +71,7 @@ class DatasetGenerator():
             keypoints_cropped, img_cropped = self.crop_scale_img(img, keypoints, bbox)
 
             # Save the cropped image
-            output_path = self.output_dir + "/" + "train" + "/" + filename
+            output_path = self.output_dir + "/" + "val" + "/" + filename
 
             # save the cropped image and get a confirmation
             os.makedirs(os.path.dirname(output_path), exist_ok=True)
@@ -82,9 +82,11 @@ class DatasetGenerator():
             keypoints_row = [output_path] + keypoints_cropped.flatten().tolist()
             train_df.loc[len(train_df)] = keypoints_row
             print(f"Processed {filename}")
+            if index > 600:
+                break
 
         # save the train_df to a csv file
-        train_csv_path = self.output_dir + "/" + "train" + "/" + "/keypoints.csv"
+        train_csv_path = self.output_dir + "/" + "val" + "/" + "keypoints.csv"
         os.makedirs(os.path.dirname(train_csv_path), exist_ok=True)
         train_df.to_csv(train_csv_path, index=False)
         print(f"Train keypoints saved to {train_csv_path}")

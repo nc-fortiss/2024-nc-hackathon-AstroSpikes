@@ -9,7 +9,8 @@ from wandb.integration.keras import WandbMetricsLogger
 import glob
 
 from src.dataloaders.spades import create_dataset
-from src.losses.poseloss import geodesic_dist, position_mse_loss, ori_error, rel_l2_error
+from src.losses.poseloss import geodesic_dist, position_mse_loss, ori_error, rel_l2_error, mpkpe_heatmap, mpkpe_regression
+from src.losses.heatmaploss import combined_loss
 from src.models.mobilenet_regression import MobilenetModel_regression
 from src.models.mobilenet_heatmap import mobilenet_heatmap
 
@@ -68,16 +69,18 @@ if __name__ == '__main__':
     wml = WandbMetricsLogger(log_freq='batch')
 
     # dataset creation, saving the training files list and validation files list
-    train_df = pd.read_csv(os.path.join(cfg.root.data_out, 'train.csv'))
+    print(os.path.join(cfg.root.data_out, '/lnes_cropped/val/keypoints.csv'))
+    train_df = pd.read_csv('/home/lecomte/AstroSpikes/SPADES/synthetic/lnes_cropped/val/keypoints.csv')
     train_data = {col: train_df[col].values for col in train_df.columns}
 
-    val_df = pd.read_csv(os.path.join(cfg.root.data_out, 'val.csv'))
+    val_df = pd.read_csv('/home/lecomte/AstroSpikes/SPADES/synthetic/lnes_cropped/val/keypoints.csv')
     val_data = {col: val_df[col].values for col in val_df.columns}
 
     train_dataset = create_dataset(train_data,
                                    batch_size=cfg.training.batch_size,
                                    input_size=cfg.data.input_size[:2],
                                    is_training=True,
+                                   heatmap=cfg.model.heatmap,
                                    cache_dir=None)
     # train_dataset = train_dataset.shuffle(buffer_size=train_dataset.cardinality(), reshuffle_each_iteration=True)
 
@@ -85,6 +88,7 @@ if __name__ == '__main__':
                                  batch_size=cfg.training.batch_size,
                                  input_size=cfg.data.input_size[:2],
                                  is_training=False,
+                                 heatmap=cfg.model.heatmap,
                                  cache_dir=None)
     # val_dataset = val_dataset.shuffle(buffer_size=val_dataset.cardinality(), reshuffle_each_iteration=True)
 
@@ -101,7 +105,8 @@ if __name__ == '__main__':
     optimizer = tf.keras.optimizers.Adam(learning_rate=lr_schedule)
 
     # Initialize model.
-    model = MobilenetModel_regression(input_shape=list(cfg.data.input_size), pretrained=cfg.model.pretrained)
+    model = mobilenet_heatmap(input_shape=list(cfg.data.input_size)) if cfg.model.heatmap else \
+        MobilenetModel_regression(input_shape=list(cfg.data.input_size), pretrained=cfg.model.pretrained)
     model.build(input_shape=(None, *list(cfg.data.input_size)))  # None is for batch size
     wandb.log({"model_summary": model.summary()})
     print(OmegaConf.to_yaml(cfg))
@@ -109,8 +114,7 @@ if __name__ == '__main__':
 
     # Define loss functions
     losses = {
-        "position": position_mse_loss,
-        "orientation": geodesic_dist
+        "position": combined_loss if cfg.model.heatmap else position_mse_loss,
     }
 
     # Assign different importance to losses
@@ -118,13 +122,12 @@ if __name__ == '__main__':
                         constraint=lambda x: tf.clip_by_value(x, 0.01, 1.0))
     loss_weights_dict = {
         "position": tf.keras.backend.get_value(alpha),
-        "orientation": 1.0 - tf.keras.backend.get_value(alpha)
     }
 
     metrics_dict = {
-        "position": rel_l2_error,  # Two metrics for position
-        "orientation": ori_error  # Only MSE for orientation
+        "position": mpkpe_heatmap if cfg.model.heatmap else mpkpe_regression,  # Two metrics for position
     }
+
     # Training Loop
     model.compile(loss=losses,
                   loss_weights=loss_weights_dict,
