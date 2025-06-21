@@ -5,6 +5,7 @@ root:
   data_out: "/home/lecomte/AstroSpikes/SPADES/synthetic"
   checkpoint: "/home/lecomte/experiments/SPADES/${id}"
   test_data: "/home/lecomte/datasets/SPADES/synthetic/val.csv"
+  labels_dir: "/Users/jost/Jost/Code/2024-nc-hackathon-spades/spades_label"
 
 filter:
   method: "get_distribution"

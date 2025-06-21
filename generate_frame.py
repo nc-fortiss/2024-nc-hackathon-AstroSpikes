@@ -8,12 +8,11 @@ import tonic
 from PIL import Image
 from omegaconf import OmegaConf
 
-from src.utils.filters import Filters
 from src.utils.transformations import Transformations
 
 
 class SamplesDataLoader(tonic.Dataset):
-    def __init__(self, dataset_dir, dataset_type="synthetic", transform=None, filter=None):
+    def __init__(self, dataset_dir, dataset_type="synthetic", transform=None):
         """
         Args:
             dataset_dir (str): Root directory containing the synthetic or Real dataset folders.
@@ -24,7 +23,7 @@ class SamplesDataLoader(tonic.Dataset):
         self.dataset_type = dataset_type
         self.samples = self._load_samples()
         self.transform = transform
-        self.filter = filter
+       # self.filter = filter
 
     def _load_samples(self):
         """
@@ -117,8 +116,8 @@ class SamplesDataLoader(tonic.Dataset):
         else:
             labels = None
 
-        if self.filter(events=events) is False:
-            return None, None
+       # if self.filter(events=events) is False:
+      #      return None, None
 
         # transform events and create frames
         event_frames = self.transform(events=events)
@@ -185,7 +184,7 @@ if __name__ == "__main__":
 
     # Load configuration parameters
     transformation_instance = Transformations(cfg)
-    filter_instance = Filters(cfg.filter.parameters.conditions)
+    #filter_instance = Filters(cfg.filter.parameters.conditions)
 
     # Mapping of event representations and filters
     event_representations = {
@@ -196,20 +195,20 @@ if __name__ == "__main__":
         "three_c_representation": transformation_instance.three_c_representation,
     }
 
-    filters = {
-        "get_distribution": filter_instance.get_distribution,
-    }
+   # filters = {
+   #     "get_distribution": filter_instance.get_distribution,
+   # }
 
     # Initialize data loader
     t = event_representations[cfg.data.transformation]
-    f = filters[cfg.filter.method]
+   # f = filters[cfg.filter.method]
     d_type = cfg.data.source
 
     print(f"Event representation: {cfg.data.transformation}")
-    print(f"Filter: {cfg.filter.method}")
+  #  print(f"Filter: {cfg.filter.method}")
     print(f"Dataset type: {d_type}\n")
 
-    data_loader = SamplesDataLoader(dataset_dir=dataset_dir, dataset_type=d_type, transform=t, filter=f)
+    data_loader = SamplesDataLoader(dataset_dir=dataset_dir, dataset_type=d_type, transform=t)
     print(f"Successfully initialized data loader.")
 
     # Generate RGB frames from samples and save them
