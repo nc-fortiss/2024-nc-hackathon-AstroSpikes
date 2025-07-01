@@ -15,16 +15,10 @@ from src.losses.heatmaploss import heatmap_loss
 from src.models.mobilenet_regression import MobilenetModel_regression
 from src.models.mobilenet_heatmap import MobilenetModelHeatmap
 
-#
-# class LossWeightUpdater(tf.keras.callbacks.Callback):
-#     def on_epoch_end(self, epoch, logs=None):
-#         loss_weights_dict["position"] = alpha.numpy()
-#         loss_weights_dict["orientation"] = 1.0 - alpha.numpy()
-
 
 if __name__ == '__main__':
     # loading omegaconf
-    config_path = "configs/mobilenet.yaml"
+    config_path = "configs/mobilenet_heatmap.yaml"
     try:
         cfg = OmegaConf.load(config_path)
     except Exception as e:
@@ -61,10 +55,6 @@ if __name__ == '__main__':
         verbose=cfg.training.verbose,
         save_best_only=True,
         mode='min')
-
-    # tensorboard_callback = tf.keras.callbacks.TensorBoard(
-    #     log_dir=logdir,
-    #     update_freq='batch')
 
     # Wandb Metric Logger
     wml = WandbMetricsLogger(log_freq='batch')
@@ -119,25 +109,16 @@ if __name__ == '__main__':
         "position": heatmap_loss if cfg.model.heatmap else position_mse_loss,
     }
 
-    # Assign different importance to losses
-    # alpha = tf.Variable(0.1, trainable=True, dtype=tf.float32,
-    #                     constraint=lambda x: tf.clip_by_value(x, 0.01, 1.0))
-    # loss_weights_dict = {
-    #     "position": tf.keras.backend.get_value(alpha),
-    # }
-
     metrics_dict = {
-        "position": mpkpe_heatmap if cfg.model.heatmap else mpkpe_regression,  # Two metrics for position
+        "position": mpkpe_heatmap if cfg.model.heatmap else mpkpe_regression,
     }
 
     # Training Loop
     model.compile(loss=losses,
-                  # loss_weights=loss_weights_dict,
                   optimizer=optimizer,
                   metrics=metrics_dict
                   )
 
-    # model.compile(loss=BetaLoss(), optimizer=optimizer)  # check beta = {2, 5, 10, 20}
     steps_per_epoch = len(train_data[next(iter(train_data))]) // cfg.training.batch_size  # Calculate steps per epoch
     validation_steps = len(val_data[next(iter(val_data))]) // cfg.training.batch_size
 
