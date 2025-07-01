@@ -1,6 +1,7 @@
 import tensorflow as tf
 import tensorflow_graphics.geometry.transformation as tfgt
-from dsnt import dsnt
+from src.utils import dsnt
+
 
 def position_mse_loss(target_pos, pred_pos):
     mse_loss = tf.keras.losses.MeanSquaredError(reduction=tf.keras.losses.Reduction.SUM)(target_pos, pred_pos)
@@ -11,31 +12,40 @@ def geodesic_dist(y_true, y_pred):
     y_pred = tfgt.quaternion.normalize(y_pred)
     return tfgt.quaternion.relative_angle(y_true, y_pred)
 
+#
+# def mpkpe_heatmap(y_true, y_pred):
+#     """
+#     Computes the Mean Relative L2 Error for translation vectors (x, y, z).
+#     """
+#     distance = 0
+#     # target_pose = tf.reshape(y_true, [y_pred.shape[0],2,y_pred.shape[-1]])
+#     for ch in range(y_pred.shape[-1]):
+#         y_pred_coords = (y_pred[:, :, :, ch])[1]
+#         # y_true = tf.reshape(y_true,y_pred.shape)
+#         # Compute the L2 norm of the error
+#         distance += tf.norm(y_true[:, :, ch] - y_pred_coords, axis=-1)  # Shape: (batch_size,)
+#
+#     # Keras will automatically compute the mean over the batch
+#     print("distance : ", tf.math.reduce_sum(distance))
+#     return tf.math.reduce_sum(distance)  # Shape: (batch_size,)
 
 
 def mpkpe_heatmap(y_true, y_pred):
-    """
-    Computes the Mean Relative L2 Error for translation vectors (x, y, z).
-    """
-    distance = 0
-    #target_pose = tf.reshape(y_true, [y_pred.shape[0],2,y_pred.shape[-1]])
-    for ch in range(y_pred.shape[-1]):
-        y_pred_coords = dsnt.dsnt(y_pred[:,:,:,ch])[1]
-        #y_true = tf.reshape(y_true,y_pred.shape)
-        # Compute the L2 norm of the error
-        distance += tf.norm(y_true[:,:,ch] - y_pred_coords, axis=-1)  # Shape: (batch_size,)
+    all_coords = []
+    for heatmap in y_pred:
+        _, coords = dsnt.dsnt(heatmap, method='softmax')
+        all_coords.append(coords)
+    y_pred_coords = tf.stack(all_coords, axis=1)
+    return tf.math.reduce_sum(y_true - y_pred_coords)
 
-    # Keras will automatically compute the mean over the batch
-    print("distance : ", tf.math.reduce_sum(distance))
-    return tf.math.reduce_sum(distance)  # Shape: (batch_size,)
 
 def mpkpe_regression(y_true, y_pred):
     """
     Computes the Mean Relative L2 Error for translation vectors (x, y, z).
     """
- 
+
     # Keras will automatically compute the mean over the batch
-    return tf.norm(y_true - y_pred, axis=-1) 
+    return tf.norm(y_true - y_pred, axis=-1)
 
 
 def rel_l2_error(y_true, y_pred):

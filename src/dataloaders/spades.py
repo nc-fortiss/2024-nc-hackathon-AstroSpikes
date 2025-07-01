@@ -29,23 +29,59 @@ def create_dataset(data: dict, batch_size: int, input_size: Tuple[int, int],
         """Loads, preprocesses, and converts a single image to a tensor."""
         image = tf.io.read_file(filepath)
         image = tf.image.decode_jpeg(image, channels=3)  # Or decode_png, depending on your image format
-        #image = tf.image.resize(image, input_size)
+        # image = tf.image.resize(image, input_size)
         image = tf.image.convert_image_dtype(image, dtype=tf.float32)  # Normalize to [0, 1]
         return image
+
+    def _parse_bbox(bbox_str):
+        """
+        Parses a string like '[x0, y0, x1, y1]' into a float tensor.
+        """
+        # Remove brackets and spaces
+        s = tf.strings.regex_replace(bbox_str, r'\[|\]| ', '')
+        # Split by comma
+        parts = tf.strings.split(s, sep=',')
+        # Convert to numbers
+        return tf.strings.to_number(parts, out_type=tf.float32)
+
+    def _normalize_keypoints(abs_positions, bbox):
+        x0, y0, x1, y1 = bbox[0], bbox[1], bbox[2], bbox[3]
+
+        """Normalize keypoints to [0, 1]"""
+        bbox_width = x1 - x0 + 1e-6
+        bbox_height = y1 - y0 + 1e-6
+
+        bbox_origin = tf.stack([x0, y0])
+        bbox_dims = tf.stack([bbox_width, bbox_height])
+
+        # Apply the normalization formula using broadcasting: (pos - origin) / dims
+        normalized_positions = (abs_positions - bbox_origin) / bbox_dims
+
+        return normalized_positions
 
     def _process_data(item):
         """Process each item: load image and stack positions/quaternions"""
         image = _load_and_preprocess(item["filepath"])
         positions = []
-        for i in range(8) :
-            positions.append([item[f'k{i}x'], item[f'k{i}y']])
-        positions = tf.reshape(tf.stack(positions, axis=-1), [2,8]) if heatmap else positions = tf.reshape(tf.stack(positions, axis=-1), [16])
-        return image, positions
+        for i in range(8):
+            # Ensure keypoints are float32
+            px = tf.cast(item[f'k{i}x'], tf.float32)
+            py = tf.cast(item[f'k{i}y'], tf.float32)
+            positions.append([px, py])
+        abs_positions = tf.stack(positions, axis=0)  # Shape: [8, 2]
 
-    # Create a tf.data.Dataset from the filepaths and individual label tensors
-    # New version with json file
-    #with open(data) as json_file:
-    #    datadict = json.load(json_file)
+        bbox = _parse_bbox(item['bbox'])
+        normalized_positions = _normalize_keypoints(abs_positions, bbox)
+        # 6. Reshape the output based on the 'heatmap' flag
+        if heatmap:
+            # The shape [8, 2] is ideal for heatmap targets
+            output_positions = normalized_positions
+        else:
+            # For direct regression, flatten to shape [16]
+            output_positions = tf.reshape(normalized_positions, [16])
+
+        return image, output_positions
+
     dataset = tf.data.Dataset.from_tensor_slices(data)
 
     if is_training:
