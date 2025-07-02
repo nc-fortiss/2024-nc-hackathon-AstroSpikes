@@ -44,18 +44,50 @@ def create_dataset(data: dict, batch_size: int, input_size: Tuple[int, int],
         # Convert to numbers
         return tf.strings.to_number(parts, out_type=tf.float32)
 
-    def _normalize_keypoints(abs_positions, bbox):
-        x0, y0, x1, y1 = bbox[0], bbox[1], bbox[2], bbox[3]
+    # def _normalize_keypoints(abs_positions, bbox):
+    #     x0, y0, x1, y1 = bbox[0], bbox[1], bbox[2], bbox[3]
+    #
+    #     """Normalize keypoints to [0, 1]"""
+    #     bbox_width = x1 - x0 + 1e-6
+    #     bbox_height = y1 - y0 + 1e-6
+    #
+    #     bbox_origin = tf.stack([x0, y0])
+    #     bbox_dims = tf.stack([bbox_width, bbox_height])
+    #
+    #     # Apply the normalization formula using broadcasting: (pos - origin) / dims
+    #     normalized_positions = (abs_positions - bbox_origin) / bbox_dims
+    #
+    #     return normalized_positions
 
-        """Normalize keypoints to [0, 1]"""
+    def _normalize_keypoints(abs_positions, bbox):
+        """
+        Normalizes absolute keypoint positions to the [-1, 1] range relative to a bounding box.
+
+        This function first maps the absolute coordinates within the bounding box to a
+        [0, 1] range and then scales and shifts them to the desired [-1, 1] range,
+        which is the standard for DSNT-related operations.
+
+        Args:
+            abs_positions (tf.Tensor): A tensor of absolute keypoint coordinates,
+                with shape (..., N, 2), where the last dimension is (x, y).
+            bbox (tf.Tensor or list/tuple): The bounding box coordinates as
+                [x_min, y_min, x_max, y_max].
+
+        Returns:
+            tf.Tensor: The normalized keypoint positions in the [-1, 1] range.
+        """
+        # Unpack the bounding box coordinates [x_min, y_min, x_max, y_max]
+        x0, y0, x1, y1 = bbox[0], bbox[1], bbox[2], bbox[3]
         bbox_width = x1 - x0 + 1e-6
         bbox_height = y1 - y0 + 1e-6
-
         bbox_origin = tf.stack([x0, y0])
         bbox_dims = tf.stack([bbox_width, bbox_height])
+        # Step 1: Normalize coordinates to the [0, 1] range relative to the bounding box.
+        norm_01 = (abs_positions - bbox_origin) / bbox_dims
 
-        # Apply the normalization formula using broadcasting: (pos - origin) / dims
-        normalized_positions = (abs_positions - bbox_origin) / bbox_dims
+        # Step 2: Scale and shift the [0, 1] range to the [-1, 1] range.
+        # The linear transformation from [0, 1] to [-1, 1] is: y = 2x - 1
+        normalized_positions = 2.0 * norm_01 - 1.0
 
         return normalized_positions
 

@@ -22,6 +22,7 @@ data:
   test_split: 0.2
 
 training:
+  input_size: [224, 224, 3]
   lr: 1e-4
   num_epochs: 300
   beta_epochs: 5
@@ -32,7 +33,7 @@ training:
 
 model:
   heatmap: True
-  pretrained: True
+  pretrained: False
   trained_weights:
 
 wandb:

@@ -93,24 +93,25 @@ if __name__ == '__main__':
         decay_rate=decay_rate,
         staircase=True)
 
-    optimizer = tf.keras.optimizers.Adam(learning_rate=lr_schedule)
+    optimizer = tf.keras.optimizers.Adam(learning_rate=lr_schedule, clipvalue=0.5)
 
     # Initialize model.
-    model = MobilenetModelHeatmap(input_shape=list(cfg.data.input_size), num_keypoints=8,
-                                  pretrained=cfg.model.pretrained) if cfg.model.heatmap else \
-        MobilenetModel_regression(input_shape=list(cfg.data.input_size), pretrained=cfg.model.pretrained)
-    model.build(input_shape=(None, *list(cfg.data.input_size)))  # None is for batch size
+    model = MobilenetModelHeatmap(input_shape=list(cfg.training.input_size), num_keypoints=8,
+                                  pretrained=cfg.model.pretrained)
+        # if cfg.model.heatmap else \
+        # MobilenetModel_regression(input_shape=list(cfg.data.input_size), pretrained=cfg.model.pretrained)
+    model.build(input_shape=(None, *list(cfg.training.input_size)))  # None is for batch size
     wandb.log({"model_summary": model.summary()})
     print(OmegaConf.to_yaml(cfg))
     print('Exp_ID:', exp_folder)
 
     # Define loss functions
     losses = {
-        "position": heatmap_loss if cfg.model.heatmap else position_mse_loss,
+        "heatmap_output": heatmap_loss if cfg.model.heatmap else position_mse_loss,
     }
 
     metrics_dict = {
-        "position": mpkpe_heatmap if cfg.model.heatmap else mpkpe_regression,
+        "heatmap_output": mpkpe_heatmap if cfg.model.heatmap else mpkpe_regression,
     }
 
     # Training Loop

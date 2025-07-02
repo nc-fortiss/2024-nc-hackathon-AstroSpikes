@@ -43,17 +43,17 @@ def MobilenetModelHeatmap(input_shape, num_keypoints, pretrained=True):
     # and upsamples it to a larger heatmap (e.g., 56x56).
 
     # Upsample block 1
-    x = Conv2DTranspose(256, kernel_size=3, strides=2, padding='same', use_bias=False)(x)
+    x = Conv2DTranspose(256, kernel_size=3, strides=2, padding='same')(x)
     x = BatchNormalization()(x)
     x = ReLU()(x)
 
     # Upsample block 2
-    x = Conv2DTranspose(128, kernel_size=3, strides=2, padding='same', use_bias=False)(x)
+    x = Conv2DTranspose(128, kernel_size=3, strides=2, padding='same')(x)
     x = BatchNormalization()(x)
     x = ReLU()(x)
 
     # Upsample block 3
-    x = Conv2DTranspose(64, kernel_size=3, strides=2, padding='same', use_bias=False)(x)
+    x = Conv2DTranspose(64, kernel_size=3, strides=2, padding='same')(x)
     x = BatchNormalization()(x)
     x = ReLU()(x)
 

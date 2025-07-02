@@ -220,9 +220,9 @@ if __name__ == "__main__":
     # but for this script, hardcoded values are clear.
     config_path = "configs/mobilenet.yaml"
     splits: Sequence[str] = ("train", "val", "test")
-    limit_train: Optional[int] = None  # Example: Set a limit for faster testing
-    limit_val: Optional[int] = None
-    limit_test: Optional[int] = None
+    limit_train: Optional[int] = 1000  # Example: Set a limit for faster testing
+    limit_val: Optional[int] = 1000
+    limit_test: Optional[int] = 1000
     loglevel: str | int = "INFO"
 
     main(config_path,
