@@ -30,6 +30,7 @@ training:
   batch_size: 16
   log_Step: 1
   val_log_Step: 1
+  distributed: True
 
 model:
   heatmap: True

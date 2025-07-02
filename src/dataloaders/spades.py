@@ -29,6 +29,11 @@ def create_dataset(data: dict, batch_size: int, input_size: Tuple[int, int],
 
     def _load_and_preprocess(filepath: tf.Tensor) -> tf.Tensor:
         """Loads, preprocesses, and converts a single image to a tensor."""
+        # filepath = tf.strings.regex_replace(
+        #     filepath,
+        #     pattern="^/home/arunkumar",  # Match /home at the start of the string
+        #     rewrite="/data/arathinam"
+        # )
         image = tf.io.read_file(filepath)
         image = tf.image.decode_jpeg(image, channels=3)  # Or decode_png, depending on your image format
         # image = tf.image.resize(image, input_size)
@@ -73,7 +78,6 @@ def create_dataset(data: dict, batch_size: int, input_size: Tuple[int, int],
             output_positions = tf.reshape(normalized_positions, [16])
 
         return image, output_positions
-        # return image, output_positions, resized_input_positions
 
     dataset = tf.data.Dataset.from_tensor_slices(data)
 
