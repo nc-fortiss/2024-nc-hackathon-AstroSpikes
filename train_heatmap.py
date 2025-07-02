@@ -1,20 +1,18 @@
+import glob
 import os
-import tensorflow as tf
 from datetime import datetime
+
 import pandas as pd
+import tensorflow as tf
 import wandb
 from omegaconf import OmegaConf
 from tensorflow.keras.callbacks import ModelCheckpoint
 from wandb.integration.keras import WandbMetricsLogger
-import glob
 
 from src.dataloaders.spades import create_dataset
-from src.losses.poseloss import geodesic_dist, position_mse_loss, ori_error, rel_l2_error, mpkpe_heatmap, \
-    mpkpe_regression
 from src.losses.heatmaploss import heatmap_loss
-from src.models.mobilenet_regression import MobilenetModel_regression
+from src.losses.poseloss import mpkpe_heatmap, mpkpe_regression, position_mse_loss
 from src.models.mobilenet_heatmap import MobilenetModelHeatmap
-
 
 if __name__ == '__main__':
     # loading omegaconf
@@ -28,7 +26,6 @@ if __name__ == '__main__':
     checkpoint_dir = str(os.path.join(cfg.root.checkpoint, exp_folder))
     os.makedirs(checkpoint_dir, exist_ok=True)
     logdir = str(os.path.join(checkpoint_dir, 'logs'))
-    # wandb.tensorboard.patch(root_logdir=logdir)
 
     # initialize wandb
     run = wandb.init(project=cfg.wandb.project_id,
@@ -73,7 +70,6 @@ if __name__ == '__main__':
                                    is_training=True,
                                    heatmap=cfg.model.heatmap,
                                    cache_dir=None)
-    # train_dataset = train_dataset.shuffle(buffer_size=train_dataset.cardinality(), reshuffle_each_iteration=True)
 
     val_dataset = create_dataset(val_data,
                                  batch_size=cfg.training.batch_size,
@@ -81,7 +77,6 @@ if __name__ == '__main__':
                                  is_training=False,
                                  heatmap=cfg.model.heatmap,
                                  cache_dir=None)
-    # val_dataset = val_dataset.shuffle(buffer_size=val_dataset.cardinality(), reshuffle_each_iteration=True)
 
     initial_learning_rate = cfg.training.lr
     decay_steps = 5e4  # Adjust based on your dataset size and epochs
@@ -93,32 +88,37 @@ if __name__ == '__main__':
         decay_rate=decay_rate,
         staircase=True)
 
-    optimizer = tf.keras.optimizers.Adam(learning_rate=lr_schedule, clipvalue=0.5)
+    # Define losses and metrics
+    losses = {"heatmap_output": heatmap_loss if cfg.model.heatmap else position_mse_loss}
 
-    # Initialize model.
-    model = MobilenetModelHeatmap(input_shape=list(cfg.training.input_size), num_keypoints=8,
-                                  pretrained=cfg.model.pretrained)
-        # if cfg.model.heatmap else \
-        # MobilenetModel_regression(input_shape=list(cfg.data.input_size), pretrained=cfg.model.pretrained)
-    model.build(input_shape=(None, *list(cfg.training.input_size)))  # None is for batch size
+    metrics_dict = {"heatmap_output": mpkpe_heatmap if cfg.model.heatmap else mpkpe_regression}
+
+    if cfg.training.distributed:
+        mirrored_strategy = tf.distribute.MirroredStrategy()
+
+        with mirrored_strategy.scope():
+            # Initialize model.
+            model = MobilenetModelHeatmap(input_shape=list(cfg.training.input_size), num_keypoints=8,
+                                          pretrained=cfg.model.pretrained)
+            optimizer = tf.keras.optimizers.Adam(learning_rate=lr_schedule, clipvalue=0.5)
+            model.compile(loss=losses,
+                          optimizer=optimizer,
+                          metrics=metrics_dict
+                          )
+    else:
+        # Initialize model.
+        model = MobilenetModelHeatmap(input_shape=list(cfg.training.input_size), num_keypoints=8,
+                                      pretrained=cfg.model.pretrained)
+        model.build(input_shape=(None, *list(cfg.training.input_size)))  # None is for batch size
+        optimizer = tf.keras.optimizers.Adam(learning_rate=lr_schedule, clipvalue=0.5)
+        model.compile(loss=losses,
+                      optimizer=optimizer,
+                      metrics=metrics_dict
+                      )
+
     wandb.log({"model_summary": model.summary()})
     print(OmegaConf.to_yaml(cfg))
     print('Exp_ID:', exp_folder)
-
-    # Define loss functions
-    losses = {
-        "heatmap_output": heatmap_loss if cfg.model.heatmap else position_mse_loss,
-    }
-
-    metrics_dict = {
-        "heatmap_output": mpkpe_heatmap if cfg.model.heatmap else mpkpe_regression,
-    }
-
-    # Training Loop
-    model.compile(loss=losses,
-                  optimizer=optimizer,
-                  metrics=metrics_dict
-                  )
 
     steps_per_epoch = len(train_data[next(iter(train_data))]) // cfg.training.batch_size  # Calculate steps per epoch
     validation_steps = len(val_data[next(iter(val_data))]) // cfg.training.batch_size

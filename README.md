@@ -16,6 +16,8 @@ pip install tensorflow[and-cuda]==2.15
 
 pip install akida_models==1.6.1 wandb==0.18.0 tonic==1.5.0 omegaconf==2.3.0 tensorflow-addons==0.23.0
 
+pip install wandb pandas==2.2.3 matplotlib==3.8.4 omegaconf tensorflow_graphics==2021.12.3
+
 ```
 
 # Renaming Dataset
