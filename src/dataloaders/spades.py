@@ -69,7 +69,7 @@ def create_dataset(data: dict, batch_size: int, input_size: Tuple[int, int],
             rel_bbox_positions.append([px, py])
         rel_positions = tf.stack(rel_bbox_positions, axis=0)  # Shape: [8, 2]
 
-        bbox = _parse_bbox('[0,0,224,224]')
+        bbox = _parse_bbox(item['bbox'])
         normalized_positions, resized_input_positions = _normalize_keypoints(rel_positions, bbox)
 
         if heatmap:
