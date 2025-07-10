@@ -1,96 +1,19 @@
-import akida_models.imagenet.model_mobilenet as mobilenet
-import tensorflow as tf
-from cnn2snn import set_akida_version, AkidaVersion
-
-from keras import Model, regularizers
-from keras.layers import Input, Dropout, Rescaling
-
 from akida_models.imagenet.imagenet_utils import obtain_input_shape
-from akida_models.layer_blocks import conv_block, separable_conv_block, dense_block
-from akida_models.layer_blocks import Conv2DTranspose, BatchNormalization, ReLU, Conv2D
-from akida_models.utils import fetch_file, get_params_by_version
-from akida_models.model_io import load_model, get_model_path
+from akida_models.layer_blocks import conv_block, separable_conv_block
+from akida_models.utils import get_params_by_version
+from keras import Model, regularizers
+from keras.layers import Input, Rescaling
 
-
-def MobilenetModelHeatmap(input_shape, num_keypoints, pretrained=True):
-    """
-    Creates a MobileNet-based model for heatmap regression.
-
-    This model uses a pretrained MobileNet as a feature extractor and then
-    applies a series of transposed convolutions (deconvolutions) to upsample
-    the feature map and generate a stack of heatmaps.
-
-    Arguments:
-        input_shape (tuple): The shape of the input images, e.g., (224, 224, 3).
-        num_keypoints (int): The number of keypoints to predict. This will be the
-                             number of channels in the output heatmap.
-        pretrained (bool): Whether to load weights pretrained on ImageNet for the
-                           backbone.
-    Returns:
-        tf.keras.Model: A Keras model that takes an image and outputs heatmaps.
-    """
-    with set_akida_version(AkidaVersion.v1):
-        if pretrained:
-            base_model = mobilenet.mobilenet_imagenet_pretrained(alpha=1.0, quantized=False)
-        else:
-            base_model = mobilenet.mobilenet_imagenet(input_shape=input_shape, alpha=1.0, include_top=False,
-                                                      input_scaling=None)
-            # We want to create an upsampling head on top of the backbone
-    # Let's make the backbone trainable
-    base_model.trainable = True
-
-    # --- Model Definition ---
-    inputs = tf.keras.Input(shape=input_shape, name="image_input")
-
-    # Feature extraction using the backbone
-    x = base_model(inputs, training=True)
-
-    # --- Upsampling Head ---
-    # This part takes the small feature map from MobileNetV2 (e.g., 7x7)
-    # and upsamples it to a larger heatmap (e.g., 56x56).
-
-    # Upsample block 1
-    x = Conv2DTranspose(256, kernel_size=3, strides=2, padding='same')(x)
-    x = BatchNormalization()(x)
-    x = ReLU()(x)
-
-    # Upsample block 2
-    x = Conv2DTranspose(128, kernel_size=3, strides=2, padding='same')(x)
-    x = BatchNormalization()(x)
-    x = ReLU()(x)
-
-    # Upsample block 3
-    x = Conv2DTranspose(64, kernel_size=3, strides=2, padding='same')(x)
-    x = BatchNormalization()(x)
-    x = ReLU()(x)
-
-    # --- Final Heatmap Layer ---
-    # The final layer is a 1x1 convolution with a number of filters equal to
-    # the number of keypoints. We output raw logits, as the DSNT function's
-    # `_normalise_heatmap` (e.g., via 'softmax') will handle the activation.
-    heatmap_logits = Conv2D(
-        filters=num_keypoints,
-        kernel_size=1,
-        padding='same',
-        activation=None,  # Output raw scores (logits)
-        name='heatmap_logits'
-    )(x)
-
-    # Name the output for clarity
-    heatmap_output = tf.keras.layers.Activation('linear', name='heatmap_output')(heatmap_logits)
-
-    model = tf.keras.Model(inputs=inputs, outputs=heatmap_output, name="MobilenetV2_Heatmap_Regression")
-    return model
 
 def mobilenet_heatmap(input_size=None,
-                       alpha=1.0,
-                       num_keypoints=8,
-                       dropout=1e-3,
-                       include_top=False,
-                       pooling=None,
-                       classes=1000,
-                       use_stride2=True,
-                       input_scaling=None):
+                      alpha=1.0,
+                      num_keypoints=8,
+                      dropout=1e-3,
+                      include_top=False,
+                      pooling=None,
+                      classes=1000,
+                      use_stride2=True,
+                      input_scaling=None):
     """Instantiates the MobileNet architecture.
 
     Note: input preprocessing is included as part of the model (as a Rescaling layer). This model
@@ -136,7 +59,7 @@ def mobilenet_heatmap(input_size=None,
     # Model version management
     # Model version management
     fused, post_relu_gap, relu_activation = get_params_by_version()
-    #fused, post_relu_gap, relu_activation = get_params_by_version(relu_v2='ReLU7.5')
+    # fused, post_relu_gap, relu_activation = get_params_by_version(relu_v2='ReLU7.5')
 
     # Define weight regularization, will apply to the first convolutional layer
     # and to all pointwise weights of separable convolutional layers.
@@ -163,9 +86,9 @@ def mobilenet_heatmap(input_size=None,
             default_size = 224
 
     input_size = obtain_input_shape(input_size,
-                                     default_size=default_size,
-                                     min_size=32,
-                                     include_top=include_top)
+                                    default_size=default_size,
+                                    min_size=32,
+                                    include_top=include_top)
 
     rows = input_size[0]
     cols = input_size[1]
@@ -184,7 +107,7 @@ def mobilenet_heatmap(input_size=None,
                    kernel_size=(3, 3),
                    padding='same',
                    use_bias=False,
-                   strides=1,#2,
+                   strides=1,  # 2,
                    add_batchnorm=True,
                    relu_activation=relu_activation,
                    kernel_regularizer=weight_regularizer)
@@ -230,7 +153,7 @@ def mobilenet_heatmap(input_size=None,
                              kernel_size=(3, 3),
                              padding='same',
                              pooling=sep_conv_pooling,
-                             strides=1,#strides,
+                             strides=1,  # strides,
                              use_bias=False,
                              add_batchnorm=True,
                              relu_activation=relu_activation,
@@ -322,7 +245,7 @@ def mobilenet_heatmap(input_size=None,
                              kernel_size=(3, 3),
                              padding='same',
                              pooling=sep_conv_pooling,
-                             strides=1,#strides,
+                             strides=1,  # strides,
                              use_bias=False,
                              add_batchnorm=True,
                              relu_activation=relu_activation,
@@ -331,48 +254,45 @@ def mobilenet_heatmap(input_size=None,
 
     # Last separable layer with global pooling
     x = conv_block(x,
-                    filters=int(256 * alpha),
-                    name='conv256',
-                    kernel_size=(3, 3),
-                    padding='same',
-                    pooling='avg',
-                    use_bias=False,
-                    add_batchnorm=True,
-                    relu_activation=relu_activation,
-                    post_relu_gap=post_relu_gap)
+                   filters=int(256 * alpha),
+                   name='conv256',
+                   kernel_size=(3, 3),
+                   padding='same',
+                   pooling='avg',
+                   use_bias=False,
+                   add_batchnorm=True,
+                   relu_activation=relu_activation,
+                   post_relu_gap=post_relu_gap)
     x = conv_block(x,
-                    filters=int(128 * alpha),
-                    name='conv128',
-                    kernel_size=(3, 3),
-                    padding='same',
-                    pooling='avg',
-                    use_bias=False,
-                    add_batchnorm=True,
-                    relu_activation=relu_activation,
-                    post_relu_gap=post_relu_gap)
+                   filters=int(128 * alpha),
+                   name='conv128',
+                   kernel_size=(3, 3),
+                   padding='same',
+                   pooling='avg',
+                   use_bias=False,
+                   add_batchnorm=True,
+                   relu_activation=relu_activation,
+                   post_relu_gap=post_relu_gap)
     x = conv_block(x,
-                    filters=int(64 * alpha),
-                    name='conv64',
-                    kernel_size=(3, 3),
-                    padding='same',
-                    pooling='avg',
-                    use_bias=False,
-                    add_batchnorm=True,
-                    relu_activation=relu_activation,
-                    post_relu_gap=post_relu_gap)
+                   filters=int(64 * alpha),
+                   name='conv64',
+                   kernel_size=(3, 3),
+                   padding='same',
+                   pooling='avg',
+                   use_bias=False,
+                   add_batchnorm=True,
+                   relu_activation=relu_activation,
+                   post_relu_gap=post_relu_gap)
     x = conv_block(x,
-                    filters=int(num_keypoints * alpha),
-                    name='heatmap_output',
-                    kernel_size=(1,1),
-                    padding='same',
-                    pooling='avg',
-                    use_bias=False,
-                    add_batchnorm=False,
-                    relu_activation=False,
-                    post_relu_gap=post_relu_gap)
+                   filters=int(num_keypoints * alpha),
+                   name='heatmap_output',
+                   kernel_size=(1, 1),
+                   padding='same',
+                   pooling='avg',
+                   use_bias=False,
+                   add_batchnorm=False,
+                   relu_activation=False,
+                   post_relu_gap=post_relu_gap)
 
     # Create model.
     return Model(img_input, x, name='mobilenet_%0.2f_%s_%s' % (alpha, rows, classes))
-
-
-

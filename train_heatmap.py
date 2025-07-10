@@ -8,12 +8,12 @@ import wandb
 from omegaconf import OmegaConf
 from tensorflow.keras.callbacks import ModelCheckpoint
 from wandb.integration.keras import WandbMetricsLogger
-import cnn2snn 
+import cnn2snn
 
 from src.dataloaders.spades import create_dataset
 from src.losses.heatmaploss import heatmap_loss
 from src.losses.poseloss import mpkpe_heatmap, mpkpe_regression, position_mse_loss
-from src.models.mobilenet_heatmap import MobilenetModelHeatmap
+from src.models.mobilenet_heatmap import mobilenet_heatmap
 
 if __name__ == '__main__':
     # loading omegaconf
@@ -101,8 +101,7 @@ if __name__ == '__main__':
 
         with mirrored_strategy.scope():
             # Initialize model.
-            model = MobilenetModelHeatmap(input_shape=list(cfg.training.input_size), num_keypoints=8,
-                                          pretrained=cfg.model.pretrained)
+            model = mobilenet_heatmap(input_size=list(cfg.training.input_size), num_keypoints=8)
             optimizer = tf.keras.optimizers.Adam(learning_rate=lr_schedule, clipvalue=0.5)
             model.compile(loss=losses,
                           optimizer=optimizer,
@@ -110,8 +109,7 @@ if __name__ == '__main__':
                           )
     else:
         # Initialize model.
-        model = MobilenetModelHeatmap(input_shape=list(cfg.training.input_size), num_keypoints=8,
-                                      pretrained=cfg.model.pretrained)
+        model = mobilenet_heatmap(input_size=list(cfg.training.input_size), num_keypoints=8)
         cnn2snn.check_model_compatibility(model)
         model.build(input_shape=(None, *list(cfg.training.input_size)))  # None is for batch size
         optimizer = tf.keras.optimizers.Adam(learning_rate=lr_schedule, clipvalue=0.5)
