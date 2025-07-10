@@ -8,6 +8,7 @@ import wandb
 from omegaconf import OmegaConf
 from tensorflow.keras.callbacks import ModelCheckpoint
 from wandb.integration.keras import WandbMetricsLogger
+import cnn2snn 
 
 from src.dataloaders.spades import create_dataset
 from src.losses.heatmaploss import heatmap_loss
@@ -17,6 +18,8 @@ from src.models.mobilenet_heatmap import MobilenetModelHeatmap
 if __name__ == '__main__':
     # loading omegaconf
     config_path = "configs/mobilenet_heatmap.yaml"
+    os.environ["CNN2SNN_TARGET_AKIDA_VERSION"] = "v1"
+
     try:
         cfg = OmegaConf.load(config_path)
     except Exception as e:
@@ -109,6 +112,7 @@ if __name__ == '__main__':
         # Initialize model.
         model = MobilenetModelHeatmap(input_shape=list(cfg.training.input_size), num_keypoints=8,
                                       pretrained=cfg.model.pretrained)
+        cnn2snn.check_model_compatibility(model)
         model.build(input_shape=(None, *list(cfg.training.input_size)))  # None is for batch size
         optimizer = tf.keras.optimizers.Adam(learning_rate=lr_schedule, clipvalue=0.5)
         model.compile(loss=losses,
