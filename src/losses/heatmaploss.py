@@ -3,8 +3,9 @@ import numpy as np
 import tensorflow as tf
 import tensorflow_graphics.geometry.transformation as tfgt
 from src.utils import dsnt
+import keras
 
-
+@keras.saving.register_keras_serializable()
 def heatmap_loss(y_true, y_pred_logits):
     """
     Calculates heatmap loss using Mean Squared Error (MSE), ensuring stability

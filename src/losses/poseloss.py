@@ -1,7 +1,7 @@
 import tensorflow as tf
 import tensorflow_graphics.geometry.transformation as tfgt
 from src.utils import dsnt
-
+import keras
 
 def position_mse_loss(target_pos, pred_pos):
     mse_loss = tf.keras.losses.MeanSquaredError(reduction=tf.keras.losses.Reduction.SUM)(target_pos, pred_pos)
@@ -12,7 +12,7 @@ def geodesic_dist(y_true, y_pred):
     y_pred = tfgt.quaternion.normalize(y_pred)
     return tfgt.quaternion.relative_angle(y_true, y_pred)
 
-
+@keras.saving.register_keras_serializable()
 def mpkpe_heatmap(y_true, y_pred):
     """
     Mean Per Keypoint Position Error metric for heatmap predictions.
@@ -60,7 +60,7 @@ def mpkpe_heatmap(y_true, y_pred):
     # Return the mean distance across all batches and locations
     return tf.reduce_mean(euclidean_distance)
 
-
+@keras.saving.register_keras_serializable()
 def mpkpe_regression(y_true, y_pred):
     """
     Computes the Mean Relative L2 Error for translation vectors (x, y, z).
