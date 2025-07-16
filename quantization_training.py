@@ -21,7 +21,6 @@ from src.losses.poseloss import geodesic_dist, position_mse_loss, ori_error, rel
 from src.losses.heatmaploss import heatmap_loss
 from src.models.mobilenet_regression import MobilenetModel_regression
 from src.models.mobilenet_heatmap import mobilenet_heatmap
-from quantizeml.models import quantize, QuantizationParams
 import quantizeml
 from cnn2snn import convert
 import akida as ak
@@ -33,28 +32,16 @@ from akida_models import fetch_file
 from tensorflow.keras.models import load_model
 import keras
 
-
 os.environ["CNN2SNN_TARGET_AKIDA_VERSION"] = "v1"
 print("\nCONFIGURATION")
 print("TensorFlow version: ", tf.__version__)
 print("    MetaTF version: ", ak.__version__)
 print('     Akida version: ', cnn2snn.get_akida_version()) 
 
-qparams = QuantizationParams(input_weight_bits=8, weight_bits=4, activation_bits=4)
-
-logging.basicConfig(stream=sys.stderr, level=logging.INFO)
-model_name = "networks/model_arun_heatmaps.keras"
+model_quantized = quantizeml.load_model("heatmap_dsnt_model_untrained_calibrated.h5")
+model_quantized.summary()
 input_size = (224,224,3)
-output_directory ='/home/lecomte/Documents/spikingbody/output_front/'
-model = keras.models.load_model(model_name)
-#model = mobilenet_imagenet(input_shape=input_size)
-model.summary()
-cnn2snn.check_model_compatibility(model)
-
-print("+++++++++++++++++Model Compatible++++++++++++++++++++++++")
-
-model.build(input_shape=(None, *list(input_size)))  # None is for batch size
-#model.load_weights(model_name)
+batch_size = 128
 data_path = "data/keypoints.csv"
 train_df = pd.read_csv(data_path)
 item_list = {col: train_df[col].values for col in train_df.columns}
@@ -64,23 +51,46 @@ train_dataset = create_dataset(item_list,
                                 batch_size=1,
                                 input_size=input_size[:2],
                                 is_training=True,
+                                quantize=True,
                                 cache_dir=None)
+
+
+print("dataset created!")
+
+steps_per_epoch = len(item_list['filepath']) // batch_size
+
+
+
+# Define losses and metrics
+losses = {"dequantizer_1": heatmap_loss}
 
 metrics_dict = {"dequantizer_1": mpkpe_heatmap}
 
-def compile_evaluate(model, quantized=False):
-    """ Compiles and evaluates the model, then return accuracy score. """
-    if quantized :
-        metrics_dict = {"dequantizer_1": mpkpe_heatmap}
-    else :
-        metrics_dict = {"heatmap_output": mpkpe_heatmap}  
+initial_learning_rate = 1e-3
+decay_steps = 5e4  # Adjust based on your dataset size and epochs
+decay_rate = 0.96  # Typical value
 
-    model.compile(metrics=metrics_dict)
-    return model.evaluate(train_dataset,batch_size=100,steps=10,verbose=0)[1]
+lr_schedule = tf.keras.optimizers.schedules.ExponentialDecay(
+    initial_learning_rate,
+    decay_steps=decay_steps,
+    decay_rate=decay_rate,
+    staircase=True)
 
-print('Test accuracy before quantization:', compile_evaluate(model))
 
-model_quantized = quantize(model, qparams=qparams) #, samples=train_dataset, num_samples=1024, batch_size=100, epochs=2)
-print('Test accuracy after quantization:', compile_evaluate(model_quantized, quantized=True))
-quantizeml.save_model(model_quantized, "heatmap_dsnt_model_untrained_calibrated.fbz")
-print("++++++++++++++++++MODEL QUANTIZED+++++++++++++++++++++++++++++")
+model_quantized.compile(loss=losses,
+    optimizer= tf.keras.optimizers.Adam(learning_rate=lr_schedule),
+    metrics=metrics_dict)
+
+model_quantized.fit(train_dataset, 
+                    batch_size=batch_size,
+                    steps_per_epoch=steps_per_epoch,
+                    epochs=30)
+
+
+model_akida = convert(model_quantized)
+model_akida.save("heatmap_dsnt_model")
+model_akida.summary()
+
+model_json = model_akida.to_json()
+with open('dummy_test_converter.json', 'w') as f:
+    json.dump(model_json, f)

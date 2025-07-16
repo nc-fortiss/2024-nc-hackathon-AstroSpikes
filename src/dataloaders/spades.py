@@ -37,7 +37,7 @@ def create_dataset(data: dict, batch_size: int, input_size: Tuple[int, int],
         image = tf.io.read_file(filepath)
         image = tf.image.decode_jpeg(image, channels=3)  # Or decode_png, depending on your image format
         # image = tf.image.resize(image, input_size)
-        image = tf.image.convert_image_dtype(image, dtype=tf.float32)  # Normalize to [0, 1]
+        image = tf.image.convert_image_dtype(image, dtype=tf.uint8)
         return image
 
     def _parse_bbox(bbox_str):
