@@ -6,6 +6,7 @@ from omegaconf import OmegaConf
 
 from scipy.spatial.transform import Rotation as R
 
+
 class PnPSolver:
     def __init__(self):
         config = OmegaConf.load("/Users/jost/Jost/Code/2024-nc-hackathon-spades/configs/mobilenet.yaml")
@@ -20,11 +21,12 @@ class PnPSolver:
             self.object_points = np.array(data["keypoints"], dtype=float)
 
     def solve_pnp(self, image_points):
-        success, rvec, tvec, inliers = cv2.solvePnPRansac(self.object_points, image_points, self.cam_matrix, self.dist_coeffs)
-        rmat, _ = cv2.Rodrigues(rvec)
-        rot_m = R.from_matrix(rmat)
-        q = rot_m.as_quat()  # (x, y, z, w) format.
-        r = tvec.reshape(3,) * self.scaling
+        success, rvec, tvec, inliers = cv2.solvePnPRansac(self.object_points, image_points, self.cam_matrix,
+                                                          self.dist_coeffs)
+        success, rvec1, tvec1, inliers = cv2.solvePnPRansac(self.object_points, image_points, self.cam_matrix, tvec=tvec,
+                                                          rvec=rvec, useExtrinsicGuess=True,
+                                                          distCoeffs=self.dist_coeffs)
+        rmat, _ = cv2.Rodrigues(rvec1)
+        q = R.from_matrix(rmat).as_quat()  # (x, y, z, w) format.
+        r = tvec1.reshape(3, ) * self.scaling
         return r, q
-    
-

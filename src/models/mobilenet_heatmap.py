@@ -5,15 +5,15 @@ from keras import Model, regularizers
 from keras.layers import Input, Rescaling
 
 
-def mobilenet_heatmap(input_size=None,
-                      alpha=1.0,
-                      num_keypoints=8,
-                      dropout=1e-3,
-                      include_top=False,
-                      pooling=None,
-                      classes=1000,
-                      use_stride2=True,
-                      input_scaling=None):
+def mobilenet_heatmap_compact(input_size=None,
+                              alpha=1.0,
+                              num_keypoints=8,
+                              dropout=1e-3,
+                              include_top=False,
+                              pooling=None,
+                              classes=1000,
+                              use_stride2=True,
+                              input_scaling=None):
     """Instantiates the MobileNet architecture.
 
     Note: input preprocessing is included as part of the model (as a Rescaling layer). This model
@@ -161,10 +161,11 @@ def mobilenet_heatmap(input_size=None,
                              pointwise_regularizer=weight_regularizer)
 
     x = separable_conv_block(x,
-                             filters=int(256 * alpha),
+                             filters=int(512 * alpha),
                              name='separable_5',
                              kernel_size=(3, 3),
                              padding='same',
+                             pooling=sep_conv_pooling,
                              use_bias=False,
                              add_batchnorm=True,
                              relu_activation=relu_activation,
@@ -176,7 +177,6 @@ def mobilenet_heatmap(input_size=None,
                              name='separable_6',
                              kernel_size=(3, 3),
                              padding='same',
-                             pooling=sep_conv_pooling,
                              strides=strides,
                              use_bias=False,
                              add_batchnorm=True,
@@ -195,77 +195,10 @@ def mobilenet_heatmap(input_size=None,
                              fused=fused,
                              pointwise_regularizer=weight_regularizer)
 
-    x = separable_conv_block(x,
-                             filters=int(512 * alpha),
-                             name='separable_8',
-                             kernel_size=(3, 3),
-                             padding='same',
-                             use_bias=False,
-                             add_batchnorm=True,
-                             relu_activation=relu_activation,
-                             fused=fused,
-                             pointwise_regularizer=weight_regularizer)
-
-    x = separable_conv_block(x,
-                             filters=int(512 * alpha),
-                             name='separable_9',
-                             kernel_size=(3, 3),
-                             padding='same',
-                             use_bias=False,
-                             add_batchnorm=True,
-                             relu_activation=relu_activation,
-                             fused=fused,
-                             pointwise_regularizer=weight_regularizer)
-
-    x = separable_conv_block(x,
-                             filters=int(512 * alpha),
-                             name='separable_10',
-                             kernel_size=(3, 3),
-                             padding='same',
-                             use_bias=False,
-                             add_batchnorm=True,
-                             relu_activation=relu_activation,
-                             fused=fused,
-                             pointwise_regularizer=weight_regularizer)
-
-    x = separable_conv_block(x,
-                             filters=int(512 * alpha),
-                             name='separable_11',
-                             kernel_size=(3, 3),
-                             padding='same',
-                             use_bias=False,
-                             add_batchnorm=True,
-                             relu_activation=relu_activation,
-                             fused=fused,
-                             pointwise_regularizer=weight_regularizer)
-
-    x = separable_conv_block(x,
-                             filters=int(1024 * alpha),
-                             name='separable_12',
-                             kernel_size=(3, 3),
-                             padding='same',
-                             pooling=sep_conv_pooling,
-                             strides=1,  # strides,
-                             use_bias=False,
-                             add_batchnorm=True,
-                             relu_activation=relu_activation,
-                             fused=fused,
-                             pointwise_regularizer=weight_regularizer)
-
     # Last separable layer with global pooling
     x = conv_block(x,
                    filters=int(256 * alpha),
                    name='conv256',
-                   kernel_size=(3, 3),
-                   padding='same',
-                   pooling='avg',
-                   use_bias=False,
-                   add_batchnorm=True,
-                   relu_activation=relu_activation,
-                   post_relu_gap=post_relu_gap)
-    x = conv_block(x,
-                   filters=int(128 * alpha),
-                   name='conv128',
                    kernel_size=(3, 3),
                    padding='same',
                    pooling='avg',
