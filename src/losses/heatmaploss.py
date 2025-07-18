@@ -1,9 +1,8 @@
-from scipy.stats import multivariate_normal
-import numpy as np
-import tensorflow as tf
-import tensorflow_graphics.geometry.transformation as tfgt
-from src.utils import dsnt
 import keras
+
+from src.utils import dsnt
+from src.utils.kdsnt import *
+
 
 @keras.saving.register_keras_serializable()
 def heatmap_loss(y_true, y_pred_logits):
@@ -39,12 +38,56 @@ def heatmap_loss(y_true, y_pred_logits):
 
     return loss
 
-    # # 3. Calculate the Mean Squared Error and ensure correct output shape.
-    # # Calculate squared error for each pixel: shape (B, L, H, W)
-    # squared_error = tf.square(target_heatmap - predicted_heatmap)
-    #
-    # # Reduce over spatial and location dims to get loss per sample: shape (B,)
-    # # Axes to reduce: Locations (1), Height (2), Width (3)
-    # loss_per_sample = tf.reduce_mean(squared_error, axis=[1, 2, 3])
 
-    # return loss_per_sample
+@keras.saving.register_keras_serializable()
+def dsnt_loss(y_true_kpts, y_pred_htmps_):
+    """
+    Calculates heatmap loss for a model with a CHANNELS-LAST output (B, H, W, N).
+    """
+    # Get shape from the channels-last prediction
+
+    y_pred_htmps = tf.transpose(y_pred_htmps_, perm=[0, 3, 1, 2])
+
+    input_shape = tf.shape(y_pred_htmps)
+    h = input_shape[2]
+    w = input_shape[3]
+
+    num_batches = tf.shape(y_true_kpts)[0]
+    num_kpts = tf.shape(y_true_kpts)[1]
+
+    std = tf.constant([0.025, 0.025], dtype=y_true_kpts.dtype)
+    std_base = std[tf.newaxis, tf.newaxis, :]
+    stdx = tf.tile(std_base, [num_batches, num_kpts, 1])
+
+    # 1. Generate the target Gaussian heatmap.
+    target_heatmap = render_gaussian_2d(
+        mean=y_true_kpts, std=stdx, size=(h, w), normalized_coordinates=True
+    )
+
+    # 2. Your kdsnt functions now correctly handle the (B, N, H, W) prediction
+    predicted_heatmap = spatial_softmax2d(y_pred_htmps)
+    predicted_kpts = spatial_expectation2d(predicted_heatmap, normalized_coordinates=True)
+
+    # 3. Calculate losses (this part was already correct)
+    per_example_kpts_loss = tf.keras.losses.mean_squared_error(y_true_kpts, predicted_kpts)
+
+    # Reshape both to (B, -1) for KL divergence
+    per_example_htmps_loss = tf.keras.losses.kl_divergence(
+        tf.reshape(target_heatmap, [num_batches, -1]),
+        tf.reshape(predicted_heatmap, [num_batches, -1])
+    )
+
+    kpts_loss = tf.nn.compute_average_loss(per_example_kpts_loss)
+    htmps_loss = tf.nn.compute_average_loss(per_example_htmps_loss)
+
+    loss = kpts_loss + htmps_loss
+    return loss
+
+
+if __name__ == '__main__':
+    dummy_true_kpts = tf.random.normal(shape=(16, 8, 2))
+    dummy_pred_htmps = tf.random.normal(shape=(16, 56, 56, 8))
+
+    # Call the function directly
+    loss_value = dsnt_loss(dummy_true_kpts, dummy_pred_htmps)
+    print(f"Loss value: {loss_value}")

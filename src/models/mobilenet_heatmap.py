@@ -5,15 +5,15 @@ from keras import Model, regularizers
 from keras.layers import Input, Rescaling
 
 
-def mobilenet_heatmap_compact(input_size=None,
-                              alpha=1.0,
-                              num_keypoints=8,
-                              dropout=1e-3,
-                              include_top=False,
-                              pooling=None,
-                              classes=1000,
-                              use_stride2=True,
-                              input_scaling=None):
+def mobilenet_heatmap_small(input_size=None,
+                            alpha=1.0,
+                            num_keypoints=8,
+                            dropout=1e-3,
+                            include_top=False,
+                            pooling=None,
+                            classes=1000,
+                            use_stride2=True,
+                            input_scaling=None):
     """Instantiates the MobileNet architecture.
 
     Note: input preprocessing is included as part of the model (as a Rescaling layer). This model
@@ -102,18 +102,18 @@ def mobilenet_heatmap_compact(input_size=None,
         x = Rescaling(1. / scale, offset, name="rescaling")(img_input)
 
     x = conv_block(x,
-                   filters=int(32 * alpha),
+                   filters=int(16 * alpha),
                    name='conv_0',
                    kernel_size=(3, 3),
                    padding='same',
                    use_bias=False,
-                   strides=1,  # 2,
+                   strides=1,
                    add_batchnorm=True,
                    relu_activation=relu_activation,
                    kernel_regularizer=weight_regularizer)
 
     x = separable_conv_block(x,
-                             filters=int(64 * alpha),
+                             filters=int(32 * alpha),
                              name='separable_1',
                              kernel_size=(3, 3),
                              padding='same',
@@ -124,12 +124,37 @@ def mobilenet_heatmap_compact(input_size=None,
                              pointwise_regularizer=weight_regularizer)
 
     x = separable_conv_block(x,
-                             filters=int(128 * alpha),
+                             filters=int(32 * alpha),
                              name='separable_2',
                              kernel_size=(3, 3),
                              padding='same',
+                             use_bias=False,
+                             strides=2,
+                             add_batchnorm=True,
+                             relu_activation=relu_activation,
+                             fused=fused,
+                             pointwise_regularizer=weight_regularizer)
+
+    x = separable_conv_block(x,
+                             filters=int(64 * alpha),
+                             name='separable_3',
+                             kernel_size=(3, 3),
+                             padding='same',
                              pooling=sep_conv_pooling,
-                             strides=strides,
+                             strides=1,
+                             use_bias=False,
+                             add_batchnorm=True,
+                             relu_activation=relu_activation,
+                             fused=fused,
+                             pointwise_regularizer=weight_regularizer)
+
+    x = separable_conv_block(x,
+                             filters=int(64 * alpha),
+                             name='separable_4',
+                             kernel_size=(3, 3),
+                             padding='same',
+                             pooling=sep_conv_pooling,
+                             strides=2,
                              use_bias=False,
                              add_batchnorm=True,
                              relu_activation=relu_activation,
@@ -138,7 +163,7 @@ def mobilenet_heatmap_compact(input_size=None,
 
     x = separable_conv_block(x,
                              filters=int(128 * alpha),
-                             name='separable_3',
+                             name='separable_5',
                              kernel_size=(3, 3),
                              padding='same',
                              use_bias=False,
@@ -149,44 +174,7 @@ def mobilenet_heatmap_compact(input_size=None,
 
     x = separable_conv_block(x,
                              filters=int(256 * alpha),
-                             name='separable_4',
-                             kernel_size=(3, 3),
-                             padding='same',
-                             pooling=sep_conv_pooling,
-                             strides=1,  # strides,
-                             use_bias=False,
-                             add_batchnorm=True,
-                             relu_activation=relu_activation,
-                             fused=fused,
-                             pointwise_regularizer=weight_regularizer)
-
-    x = separable_conv_block(x,
-                             filters=int(512 * alpha),
-                             name='separable_5',
-                             kernel_size=(3, 3),
-                             padding='same',
-                             pooling=sep_conv_pooling,
-                             use_bias=False,
-                             add_batchnorm=True,
-                             relu_activation=relu_activation,
-                             fused=fused,
-                             pointwise_regularizer=weight_regularizer)
-
-    x = separable_conv_block(x,
-                             filters=int(512 * alpha),
                              name='separable_6',
-                             kernel_size=(3, 3),
-                             padding='same',
-                             strides=strides,
-                             use_bias=False,
-                             add_batchnorm=True,
-                             relu_activation=relu_activation,
-                             fused=fused,
-                             pointwise_regularizer=weight_regularizer)
-
-    x = separable_conv_block(x,
-                             filters=int(512 * alpha),
-                             name='separable_7',
                              kernel_size=(3, 3),
                              padding='same',
                              use_bias=False,
@@ -196,26 +184,18 @@ def mobilenet_heatmap_compact(input_size=None,
                              pointwise_regularizer=weight_regularizer)
 
     # Last separable layer with global pooling
-    x = conv_block(x,
-                   filters=int(256 * alpha),
-                   name='conv256',
-                   kernel_size=(3, 3),
-                   padding='same',
-                   pooling='avg',
-                   use_bias=False,
-                   add_batchnorm=True,
-                   relu_activation=relu_activation,
-                   post_relu_gap=post_relu_gap)
-    x = conv_block(x,
-                   filters=int(64 * alpha),
-                   name='conv64',
-                   kernel_size=(3, 3),
-                   padding='same',
-                   pooling='avg',
-                   use_bias=False,
-                   add_batchnorm=True,
-                   relu_activation=relu_activation,
-                   post_relu_gap=post_relu_gap)
+    x = separable_conv_block(x,
+                             filters=int(128 * alpha),
+                             name='sep_conv256',
+                             kernel_size=(3, 3),
+                             padding='same',
+                             pooling='avg',
+                             use_bias=False,
+                             add_batchnorm=True,
+                             relu_activation=relu_activation,
+                             fused=fused,
+                             post_relu_gap=post_relu_gap)
+
     x = conv_block(x,
                    filters=int(num_keypoints * alpha),
                    name='heatmap_output',
@@ -229,3 +209,19 @@ def mobilenet_heatmap_compact(input_size=None,
 
     # Create model.
     return Model(img_input, x, name='mobilenet_%0.2f_%s_%s' % (alpha, rows, classes))
+
+
+if __name__ == '__main__':
+    # Initialize model.
+    input_shape = (224, 224, 3)
+    model = mobilenet_heatmap_small(input_size=input_shape)
+    print(model.summary())
+
+    # Print model layers
+    print("\nIndividual Layer Summaries:")
+    for layer in model.layers:
+        # Print individual layer summaries
+        print(f"\nLayer Name: {layer.name}")
+        print(f"Input Shape: {layer.input_shape}")
+        print(f"Output Shape: {layer.output_shape}")
+        print(f"Number of Parameters: {layer.count_params()}")

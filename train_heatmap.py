@@ -11,9 +11,9 @@ from wandb.integration.keras import WandbMetricsLogger
 import cnn2snn
 
 from src.dataloaders.spades import create_dataset
-from src.losses.heatmaploss import heatmap_loss
+from src.losses.heatmaploss import dsnt_loss
 from src.losses.poseloss import mpkpe_heatmap, mpkpe_regression, position_mse_loss
-from src.models.mobilenet_heatmap import mobilenet_heatmap_compact
+from src.models.mobilenet_heatmap import mobilenet_heatmap_small
 
 if __name__ == '__main__':
     # loading omegaconf
@@ -92,7 +92,7 @@ if __name__ == '__main__':
         staircase=True)
 
     # Define losses and metrics
-    losses = {"heatmap_output": heatmap_loss if cfg.model.heatmap else position_mse_loss}
+    losses = {"heatmap_output": dsnt_loss if cfg.model.heatmap else position_mse_loss}
 
     metrics_dict = {"heatmap_output": mpkpe_heatmap if cfg.model.heatmap else mpkpe_regression}
 
@@ -101,7 +101,7 @@ if __name__ == '__main__':
 
         with mirrored_strategy.scope():
             # Initialize model.
-            model = mobilenet_heatmap_compact(input_size=list(cfg.training.input_size), num_keypoints=8)
+            model = mobilenet_heatmap_small(input_size=list(cfg.training.input_size), num_keypoints=8)
             optimizer = tf.keras.optimizers.Adam(learning_rate=lr_schedule, clipvalue=0.5)
             model.compile(loss=losses,
                           optimizer=optimizer,
@@ -109,7 +109,7 @@ if __name__ == '__main__':
                           )
     else:
         # Initialize model.
-        model = mobilenet_heatmap_compact(input_size=list(cfg.training.input_size), num_keypoints=8)
+        model = mobilenet_heatmap_small(input_size=list(cfg.training.input_size), num_keypoints=8)
         cnn2snn.check_model_compatibility(model)
         model.build(input_shape=(None, *list(cfg.training.input_size)))  # None is for batch size
         optimizer = tf.keras.optimizers.Adam(learning_rate=lr_schedule, clipvalue=0.5)
