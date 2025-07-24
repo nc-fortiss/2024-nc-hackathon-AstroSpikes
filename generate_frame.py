@@ -169,7 +169,7 @@ if __name__ == "__main__":
 
     # Load configuration file
     try:
-        cfg = OmegaConf.load("configs/mobilenet.yaml")
+        cfg = OmegaConf.load("configs/mobilenet_heatmap.yaml")
         print(cfg)
     except Exception as e:
         print("Error loading YAML:", e)

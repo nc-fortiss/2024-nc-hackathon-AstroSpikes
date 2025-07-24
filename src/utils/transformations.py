@@ -1,18 +1,35 @@
 import numpy as np
 from omegaconf import DictConfig
 from tonic import transforms
-
+import pandas as pd
 
 class Transformations:
     def __init__(self, cfg: DictConfig):
         self.config = cfg
         self.img_size = cfg.data.input_size
 
+    def event_frame(self, events):
+        """ Takes pandas dataframe ev_data [x,y,p,t] and generates event-frame by
+            slicing beginning from start_t for a duration of acc_t """
+        # slice event dataframe
+        events = pd.DataFrame(events, columns=['t', 'x', 'y', 'p'])
+        # determine latest events (previous events of the slice will be ignored in this representation)
+        max_entries = events.loc[events.groupby(['x', 'y'])['t'].idxmax()]
+        pos_ev = max_entries.loc[(max_entries['p'] == True), ['x', 'y']]
+        neg_ev = max_entries.loc[(max_entries['p'] == False), ['x', 'y']]
+
+        # create empty event frame
+        ev_frame = np.zeros([self.img_size[0], self.img_size[1], self.img_size[2]], dtype=np.uint8)
+
+        # to be easy on the eye, we will use a blueish color for negative polarity and white for positive polarity
+        ev_frame[pos_ev['x'], pos_ev['y']] = [255, 255, 255]
+        ev_frame[neg_ev['x'], neg_ev['y']] = [80, 137, 204]
+
+        return ev_frame
+
     def three_c_representation(self, events):  # working
         transform = transforms.Compose([
             transforms.MergePolarities(),
-            #transforms.CenterCrop(sensor_size=(1280, 720, 1), size=(720, 720)),
-            transforms.Downsample(spatial_factor=(self.img_size[0]/1280,self.img_size[1]/720)),
             transforms.ToTimesurface(sensor_size=(self.img_size[0], self.img_size[1], 1), dt=333, tau=200)
         ])
         transformed_events = transform(events)
@@ -88,15 +105,9 @@ class Transformations:
         return ret
 
     def lnes(self, events, intervalLength=1000):
-        # Define transformation pipeline
-        # transform = transforms.Compose([
-        #     transforms.CenterCrop(sensor_size=(1280, 720, 1), size=(720, 720)),
-        #     transforms.Downsample(spatial_factor=self.img_size / 720),
-        # ])
-        t_events = events
+
         # Transform and sort events by timestamp
-        # t_events = transform(events)
-        t_events = t_events[t_events['t'].argsort()]  # Sort events by time
+        t_events = events[events['t'].argsort()]  # Sort events by time
 
         # Initialize parameters
         t_start = t_events[0]['t']  # Global start time
@@ -104,8 +115,7 @@ class Transformations:
         n_time_bins = int((t_end - t_start) // intervalLength) + 1
 
         # Pre-allocate output array (n_time_bins, 240, 240, 3)
-        ret = np.zeros((n_time_bins, 1280, 720, self.img_size[2]), dtype=np.float32)
-        # ret = np.zeros((n_time_bins, self.img_size, self.img_size, self.config.data.input_size[2]), dtype=np.float32)
+        ret = np.zeros((n_time_bins, self.img_size[0], self.img_size[1], self.img_size[2]), dtype=np.float32)
 
         # Assign events to time bins
         bin_indices = ((t_events['t'] - t_start) // intervalLength).astype(np.int32)

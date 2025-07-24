@@ -1,14 +1,13 @@
-import os
 import ast  # For safely parsing the bbox string (e.g., "[x0, y0, x1, y1]")
+import os
 
-import numpy as np
-import pandas as pd
 import tensorflow as tf
+import tensorflow.keras as keras
 from omegaconf import OmegaConf
 
 from src.dataloaders.spades import create_dataset
-from src.models.mobilenet_heatmap import MobilenetModelHeatmap
-from src.utils import dsnt
+from src.models.mobilenet_heatmap import mobilenet_heatmap_small
+from src.utils.kdsnt import spatial_expectation2d
 
 
 def convert_to_original_size(coordst, gt_df, csv_path_out):
@@ -156,23 +155,28 @@ if __name__ == '__main__':
     # tf.keras.utils.get_custom_objects().update({'PoseEstimationLoss': PoseEstimationLoss})
     input_image_size = config.data.input_size
     input_shape = list(config.data.input_size)  # Convert ListConfig to a standard list
-    model = MobilenetModelHeatmap(input_shape=list(config.training.input_size), num_keypoints=8,
-                                  pretrained=config.model.pretrained)
+    model = mobilenet_heatmap_small(input_size=list(config.training.input_size), num_keypoints=8)
     model.build(input_shape=(None, *input_shape))  # None is for batch size
-    model.load_weights(config.model.trained_weights)
+    keras.models.load_model(config.model.trained_weights)
+    # model.load_weights(config.model.trained_weights)
     predictions = model.predict(test_dataset, verbose=1)
 
+    tf.print(tf.shape(predictions))
+
     # --- Reshaping logic (remains the same and is crucial) ---
-    if tf.rank(predictions) == 4:
-        pred_shape = tf.shape(predictions)
-        if pred_shape[1] > pred_shape[3]:
-            y_pred_logits = tf.transpose(predictions, perm=[0, 3, 1, 2])
-    elif tf.rank(predictions) == 3:
-        y_pred_logits = tf.expand_dims(predictions, axis=1)
+    # if tf.rank(predictions) == 4:
+    #     pred_shape = tf.shape(predictions)
+    #     # if pred_shape[1] > pred_shape[3]:
+    #     y_pred_logits = tf.transpose(predictions, perm=[0, 3, 1, 2])
+    # elif tf.rank(predictions) == 3:
+    #     y_pred_logits = tf.expand_dims(predictions, axis=1)
 
     # Convert the model's logits into a probability heatmap.
-    predicted_heatmap = dsnt.flat_softmax(y_pred_logits)
-    n_coords = dsnt.soft_argmax(predicted_heatmap)
+    # predicted_heatmap = dsnt.flat_softmax(y_pred_logits)
+    # n_coords = dsnt.soft_argmax(predicted_heatmap)
+    predictions = tf.convert_to_tensor(predictions)  # ensures tf.Tensor
+    # spatial_softmax = spatial_softmax2d(predictions)
+    n_coords = spatial_expectation2d(predictions)
 
     pred_csv_path = "./tmp/test_predictions.csv"
     convert_to_original_size(n_coords, test_df, pred_csv_path)
