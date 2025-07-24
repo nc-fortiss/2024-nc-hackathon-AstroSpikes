@@ -280,11 +280,77 @@ def heatmap_kl_loss(y_true: tf.Tensor, y_pred: tf.Tensor) -> tf.Tensor:
     return loss / tf.cast(batch_size, loss.dtype)
 
 
+# Add this function to your dsnt_tf.py file.
+import tensorflow as tf
+
+
+def heatmap_kl_l2_loss(y_true: tf.Tensor, y_pred: tf.Tensor, lambda_l2: float = 1.0) -> tf.Tensor:
+    """
+    Computes a hybrid loss combining KL-Divergence and L2 coordinate error.
+
+    This loss function is designed for keypoint detection tasks and combines two components:
+    1.  **KL-Divergence Loss:** Compares the predicted heatmap distribution to a target
+        Gaussian distribution generated from the ground truth coordinates.
+    2.  **L2 Loss (MSE):** Compares the coordinates derived from the predicted heatmap
+        (via spatial expectation) directly with the ground truth coordinates.
+
+    Args:
+        y_true: Ground truth keypoint coordinates.
+                Expected Shape: (batch_size, num_keypoints, 2) in (x, y) pixel coordinates.
+        y_pred: Predicted heatmap logits from the model.
+                Expected Shape: (batch_size, height, width, num_keypoints) (NHWC format).
+        lambda_l2: A weight factor to balance the L2 loss component.
+
+    Returns:
+        A scalar tensor representing the combined loss, averaged over the batch.
+        total_loss = kl_loss + lambda_l2 * l2_loss
+    """
+    # --- 1. Get shapes and handle data format (NHWC -> NCHW) ---
+    pred_shape = tf.shape(y_pred)
+    batch_size, height, width, num_keypoints = pred_shape[0], pred_shape[1], pred_shape[2], pred_shape[3]
+
+    # Transpose predictions from (B, H, W, C) to (B, C, H, W) to match our helpers
+    y_pred_nchw = tf.transpose(y_pred, perm=[0, 3, 1, 2])
+
+    # --- 2. Differentiable coordinate extraction (DSNT pipeline) ---
+    p_pred = spatial_softmax2d(y_pred_nchw)
+    coords_pred = spatial_expectation2d(p_pred, normalized_coordinates=False)
+
+    # --- 3. Calculate L2 Loss component ---
+    # MSE between ground truth and predicted coordinates.
+    l2_error = tf.square(y_true - coords_pred)
+    l2_loss = tf.reduce_mean(l2_error)
+
+    # --- 4. Calculate KL-Divergence Loss component ---
+    # Generate the target heatmap distribution from ground truth coordinates.
+    std_pixel = tf.constant([5.0, 5.0], dtype=y_true.dtype)
+    p_true = render_gaussian2d(
+        mean=y_true,
+        std=std_pixel,
+        size=(height, width),
+        normalized_coordinates=False
+    )
+
+    # Flatten distributions for KLD calculation: (B, C, H, W) -> (B*C, H*W)
+    p_true_flat = tf.reshape(p_true, (batch_size * num_keypoints, -1))
+    p_pred_flat = tf.reshape(p_pred, (batch_size * num_keypoints, -1))
+
+    # Use the standard Keras KLD loss.
+    kld_loss_fn = tf.keras.losses.KLDivergence(reduction=tf.keras.losses.Reduction.SUM)
+    kl_loss_sum = kld_loss_fn(p_true_flat, p_pred_flat)
+    kl_loss = kl_loss_sum / tf.cast(batch_size, kl_loss_sum.dtype)
+
+    # --- 5. Combine the losses ---
+    total_loss = kl_loss + lambda_l2 * l2_loss
+
+    return total_loss
+
+
 # ==============================================================================
 # Metrics
 # ==============================================================================
 
-def mpjpe_from_heatmap(y_true: tf.Tensor, y_pred: tf.Tensor) -> tf.Tensor:
+def mpkpe_from_heatmap(y_true: tf.Tensor, y_pred: tf.Tensor) -> tf.Tensor:
     """
     Computes the Mean Per Keypoint Position Error (MPJPE) metric for heatmap predictions.
 

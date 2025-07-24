@@ -11,9 +11,13 @@ from wandb.integration.keras import WandbMetricsLogger
 import cnn2snn
 
 from src.dataloaders.spades import create_dataset
-from src.losses.heatmaploss import dsnt_loss
-from src.losses.poseloss import mpkpe_heatmap, mpkpe_regression, position_mse_loss
-from src.models.mobilenet_heatmap import mobilenet_heatmap_small
+from src.losses.poseloss import mpkpe_regression, position_mse_loss
+
+from src.utils.kdsnt import mpkpe_from_heatmap, heatmap_kl_l2_loss
+from src.models.mobilenet_heatmap import mobilenet_heatmap_1pass as mobilenet_heatmap_model
+
+import functools
+
 
 if __name__ == '__main__':
     # loading omegaconf
@@ -84,6 +88,10 @@ if __name__ == '__main__':
     initial_learning_rate = cfg.training.lr
     decay_steps = 5e4  # Adjust based on your dataset size and epochs
     decay_rate = 0.96  # Typical value
+    L2_WEIGHT = 0.5
+    loss_fn = functools.partial(heatmap_kl_l2_loss, lambda_l2=L2_WEIGHT)
+    # If you want to rename the loss for display during training:
+    loss_fn.__name__ = f"kl_l2_loss_lambda_{L2_WEIGHT}"
 
     lr_schedule = tf.keras.optimizers.schedules.ExponentialDecay(
         initial_learning_rate,
@@ -92,16 +100,17 @@ if __name__ == '__main__':
         staircase=True)
 
     # Define losses and metrics
-    losses = {"heatmap_output": dsnt_loss if cfg.model.heatmap else position_mse_loss}
+    losses = {"heatmap_output": loss_fn if cfg.model.heatmap else position_mse_loss}
 
-    metrics_dict = {"heatmap_output": mpkpe_heatmap if cfg.model.heatmap else mpkpe_regression}
+    metrics_dict = {"heatmap_output": mpkpe_from_heatmap if cfg.model.heatmap else mpkpe_regression}
+
 
     if cfg.training.distributed:
         mirrored_strategy = tf.distribute.MirroredStrategy()
 
         with mirrored_strategy.scope():
             # Initialize model.
-            model = mobilenet_heatmap_small(input_size=list(cfg.training.input_size), num_keypoints=8)
+            model = mobilenet_heatmap_model(input_size=list(cfg.training.input_size), num_keypoints=8)
             optimizer = tf.keras.optimizers.Adam(learning_rate=lr_schedule, clipvalue=0.5)
             model.compile(loss=losses,
                           optimizer=optimizer,
@@ -109,7 +118,7 @@ if __name__ == '__main__':
                           )
     else:
         # Initialize model.
-        model = mobilenet_heatmap_small(input_size=list(cfg.training.input_size), num_keypoints=8)
+        model = mobilenet_heatmap_model(input_size=list(cfg.training.input_size), num_keypoints=8)
         cnn2snn.check_model_compatibility(model)
         model.build(input_shape=(None, *list(cfg.training.input_size)))  # None is for batch size
         optimizer = tf.keras.optimizers.Adam(learning_rate=lr_schedule, clipvalue=0.5)
