@@ -242,7 +242,8 @@ def mobilenet_heatmap_1pass(input_size=None,
                             pooling=None,
                             classes=1000,
                             use_stride2=True,
-                            input_scaling=None):
+                            input_scaling=None,
+                            l2_factor=4e-5):
     """Instantiates the MobileNet architecture.
 
     Note: input preprocessing is included as part of the model (as a Rescaling layer). This model
@@ -292,7 +293,7 @@ def mobilenet_heatmap_1pass(input_size=None,
 
     # Define weight regularization, will apply to the first convolutional layer
     # and to all pointwise weights of separable convolutional layers.
-    weight_regularizer = regularizers.l2(4e-5)
+    weight_regularizer = regularizers.l2(l2_factor)
 
     # Define stride 2 or max pooling
     if use_stride2:
@@ -446,7 +447,6 @@ def mobilenet_heatmap_1pass(input_size=None,
                    name='heatmap_output',
                    kernel_size=(1, 1),
                    padding='same',
-                   pooling='avg',
                    use_bias=False,
                    add_batchnorm=False,
                    relu_activation=False,

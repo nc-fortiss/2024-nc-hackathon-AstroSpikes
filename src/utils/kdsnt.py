@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Optional, Tuple
 
 import tensorflow as tf
+import keras
 
 
 # ==============================================================================
@@ -168,29 +169,32 @@ def create_meshgrid_tf(
     return tf.cast(grid, dtype=dtype)
 
 
-def normalize_pixel_coordinates(coords: tf.Tensor, height: int, width: int) -> tf.Tensor:
+def normalize_pixel_coordinates(positions, height, width, dtype=tf.float32):
     """
-    Normalize keypoint coordinates from pixel space to the range [-1, 1].
+    Normalizes pixel coordinates from [0, W-1] and [0, H-1] to the range [-1, 1].
 
     Args:
-        coords: A tensor of pixel coordinates.
-                Expected shape: (..., 2) with the last dimension being (x, y).
-        height: The height of the image frame.
-        width: The width of the image frame.
+        positions: A tensor of shape [N, 2] with (x, y) coordinates.
+        height: The height of the bounding box/image. A float or a scalar tensor.
+        width: The width of the bounding box/image. A float or a scalar tensor.
+        dtype: The data type for the calculations.
 
     Returns:
-        A tensor of the same shape as `coords` with coordinates normalized to [-1, 1].
+        A tensor of shape [N, 2] with normalized coordinates.
     """
-    dtype = coords.dtype
+    # WRONG: `tf.constant` cannot accept symbolic tensors like `width` and `height`
+    # scale_dims = tf.constant([width - 1.0, height - 1.0], dtype=dtype)
 
-    # CORRECTED LOGIC: Create tensors from Python numbers first.
-    scale_dims = tf.constant([width - 1.0, height - 1.0], dtype=dtype)
+    # CORRECT: `tf.stack` correctly assembles a new tensor from existing ones
+    #          within the computation graph.
+    scale_dims = tf.stack([width - 1.0, height - 1.0], axis=0)
+    scale_dims = tf.cast(scale_dims, dtype=dtype)  # Ensure dtype consistency
 
-    scale = tf.constant([2.0, 2.0], dtype=dtype) / scale_dims
-    shift = tf.constant([-1.0, -1.0], dtype=dtype)
-
-    # Broadcasting takes care of applying the transformation along the last axis.
-    return coords * scale + shift
+    # The rest of the function remains the same
+    # (Assuming this is what the rest of the function does)
+    normalized = positions / scale_dims
+    normalized = (normalized * 2.0) - 1.0
+    return normalized
 
 
 def denormalize_pixel_coordinates(coords: tf.Tensor, height: int, width: int) -> tf.Tensor:
@@ -221,7 +225,7 @@ def denormalize_pixel_coordinates(coords: tf.Tensor, height: int, width: int) ->
 # ==============================================================================
 # Loss Functions
 # ==============================================================================
-
+@keras.saving.register_keras_serializable()
 def heatmap_kl_loss(y_true: tf.Tensor, y_pred: tf.Tensor) -> tf.Tensor:
     """
     Computes the KL-Divergence loss between predicted heatmaps and ground truth coordinates.
@@ -280,10 +284,9 @@ def heatmap_kl_loss(y_true: tf.Tensor, y_pred: tf.Tensor) -> tf.Tensor:
     return loss / tf.cast(batch_size, loss.dtype)
 
 
-# Add this function to your dsnt_tf.py file.
-import tensorflow as tf
 
 
+@keras.saving.register_keras_serializable()
 def heatmap_kl_l2_loss(y_true: tf.Tensor, y_pred: tf.Tensor, lambda_l2: float = 1.0) -> tf.Tensor:
     """
     Computes a hybrid loss combining KL-Divergence and L2 coordinate error.

@@ -1,146 +1,251 @@
+import argparse
 import glob
+import logging
 import os
 from datetime import datetime
+from pathlib import Path
 
 import pandas as pd
 import tensorflow as tf
 import wandb
 from omegaconf import OmegaConf
-from tensorflow.keras.callbacks import ModelCheckpoint
-from wandb.integration.keras import WandbMetricsLogger
-import cnn2snn
+from wandb.integration.keras import WandbMetricsLogger, WandbModelCheckpoint
 
+# Import your project's modules
 from src.dataloaders.spades import create_dataset
 from src.losses.poseloss import mpkpe_regression, position_mse_loss
-
-from src.utils.kdsnt import mpkpe_from_heatmap, heatmap_kl_l2_loss
+from src.utils.kdsnt import mpkpe_from_heatmap, heatmap_kl_l2_loss, heatmap_kl_loss
 from src.models.mobilenet_heatmap import mobilenet_heatmap_1pass as mobilenet_heatmap_model
 
-import functools
+# It's good practice to use a logger
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+
+def setup_environment(cfg):
+    """Sets up environment variables and creates directories."""
+    os.environ["CNN2SNN_TARGET_AKIDA_VERSION"] = cfg.model.environment.cnn2snn_target_akida_version
+
+    # Create a unique run directory with a timestamp for safety
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M")
+    run_dir = f"{cfg.paths.checkpoint_dir}_{timestamp}"
+    os.makedirs(run_dir, exist_ok=True)
+    logging.info(f"Checkpoint and log directory created at: {run_dir}")
+
+    return run_dir
+
+
+def initialize_wandb(cfg, run_dir, config_path):
+    """Initializes and configures a new WandB run."""
+    run = wandb.init(
+        project=cfg.wandb.project,
+        entity=cfg.wandb.entity,
+        dir=run_dir,
+        name=f"{cfg.id}-{datetime.now().strftime('%H%M%S')}",
+        config=OmegaConf.to_container(cfg, resolve=True),
+        mode=cfg.wandb.status
+    )
+    logging.info(f"WandB run initialized with name: {run.name}")
+
+    code_artifact = wandb.Artifact(
+        name=f"source-code-{wandb.run.id}", type="code"
+    )
+
+    paths_to_log = set()
+
+    paths_to_log.add(str(Path(config_path)))
+
+    # This part remains the same
+    for path in glob.glob('src/**/*.py', recursive=True):
+        paths_to_log.add(path)
+    paths_to_log.add(str(Path('train_heatmap.py')))
+
+    print(f"Logging {len(paths_to_log)} source files to W&B Artifact...")
+    for unique_path in sorted(list(paths_to_log)):
+        # This will now work because `unique_path` for the config
+        # will be the full, correct path like 'configs/my_config.yaml'
+        code_artifact.add_file(unique_path)
+
+    wandb.log_artifact(code_artifact)
+
+    return run
+
+
+def get_datasets(cfg):
+    """Loads and creates train and validation datasets."""
+    logging.info(f"Loading training data from: {cfg.paths.train_data}")
+    train_df = pd.read_csv(cfg.paths.train_data)
+    val_df = pd.read_csv(cfg.paths.val_data)
+
+    train_data = {col: train_df[col].values for col in train_df.columns}
+    val_data = {col: val_df[col].values for col in val_df.columns}
+
+    train_dataset = create_dataset(
+        train_data,
+        batch_size=cfg.training.batch_size,
+        input_size=cfg.data.input_size[:2],
+        is_training=True,
+        heatmap=cfg.model.heatmap,
+        cache_dir=None
+    )
+    val_dataset = create_dataset(
+        val_data,
+        batch_size=cfg.training.batch_size,
+        input_size=cfg.data.input_size[:2],
+        is_training=False,
+        heatmap=cfg.model.heatmap,
+        cache_dir=None
+    )
+
+    train_size = len(train_data[next(iter(train_data))])
+    val_size = len(val_data[next(iter(val_data))])
+
+    logging.info(f"Datasets created. Train size: {train_size}, Validation size: {val_size}")
+    return train_dataset, val_dataset, train_size, val_size
+
+
+def get_compiler_args(cfg):
+    """Constructs loss, optimizer, and metrics from config."""
+    # --- Learning Rate Schedule ---
+    lr_cfg = cfg.training.optimizer.learning_rate
+    if lr_cfg.schedule == "ExponentialDecay":
+        lr_schedule = tf.keras.optimizers.schedules.ExponentialDecay(
+            lr_cfg.initial_lr,
+            decay_steps=lr_cfg.decay_steps,
+            decay_rate=lr_cfg.decay_rate,
+            staircase=lr_cfg.staircase
+        )
+    else:
+        raise ValueError(f"Unsupported learning rate schedule: {lr_cfg.schedule}")
+
+    # --- Optimizer ---
+    opt_cfg = cfg.training.optimizer
+    if opt_cfg.name == "Adam":
+        optimizer = tf.keras.optimizers.Adam(learning_rate=lr_schedule, clipvalue=opt_cfg.clipvalue)
+    else:
+        raise ValueError(f"Unsupported optimizer: {opt_cfg.name}")
+
+    # --- Loss Function ---
+    # loss_cfg = cfg.training.loss
+    if cfg.model.heatmap:
+        loss_fn = heatmap_kl_loss
+        loss_fn_name = "KLDivergence"
+        losses = {"heatmap_output": loss_fn}
+    else:
+        losses = {"heatmap_output": position_mse_loss}
+
+    # --- Metrics ---
+    if cfg.model.heatmap:
+        metrics = {"heatmap_output": mpkpe_from_heatmap}
+    else:
+        metrics = {"heatmap_output": mpkpe_regression}
+
+    return {"optimizer": optimizer, "loss": losses, "metrics": metrics}
+
+
+def build_model(cfg, strategy=None):
+    """Builds and compiles the Keras model."""
+    compiler_args = get_compiler_args(cfg)
+
+    def create_and_compile():
+        model = mobilenet_heatmap_model(
+            input_size=list(cfg.data.input_size),
+            num_keypoints=cfg.model.num_keypoints,
+            l2_factor=cfg.model.l2_regularization_factor
+        )
+        model.compile(**compiler_args)
+        return model
+
+    if strategy:
+        with strategy.scope():
+            model = create_and_compile()
+            logging.info("Model built with MirroredStrategy.")
+    else:
+        model = create_and_compile()
+        logging.info("Model built on a single device.")
+
+    # Build the model to inspect summary
+    model.build(input_shape=(None, *cfg.data.input_size))
+    # Log model summary to WandB
+    s = []
+    model.summary(print_fn=lambda x: s.append(x))
+    wandb.log({"model_summary": "\n".join(s)})
+
+    return model
+
+
+def get_callbacks(cfg, run_dir):
+    """Creates the list of callbacks for model.fit()."""
+    callbacks = [
+        WandbMetricsLogger(log_freq=cfg.wandb.log_freq)
+    ]
+
+    # Use WandbModelCheckpoint to save best models as artifacts
+    # This is the modern way to handle "save best N"
+    callbacks.append(
+        WandbModelCheckpoint(
+            filepath=os.path.join(run_dir, "checkpoints", "{epoch:02d}-{val_loss:.4f}"),
+            monitor=cfg.checkpointing.monitor,
+            mode=cfg.checkpointing.mode,
+            save_best_only=True,
+            save_weights_only=False  # Save the full model
+        )
+    )
+    logging.info("WandbMetricsLogger and WandbModelCheckpoint callbacks configured.")
+    return callbacks
+
+
+def main(config_path):
+    """Main training pipeline."""
+    # Load configuration
+    cfg = OmegaConf.load(config_path)
+    print(OmegaConf.to_yaml(cfg))
+
+    # Setup environment and directories
+    run_dir = setup_environment(cfg)
+
+    # Initialize WandB
+    run = initialize_wandb(cfg, run_dir, config_path=args.config)
+
+    # Load data
+    train_dataset, val_dataset, train_size, val_size = get_datasets(cfg)
+
+    steps_per_epoch = train_size // cfg.training.batch_size
+    validation_steps = val_size // cfg.training.batch_size
+
+    # Setup distributed training strategy if enabled
+    strategy = tf.distribute.MirroredStrategy() if cfg.training.distributed else None
+
+    # Build and compile model
+    model = build_model(cfg, strategy)
+
+    # Get callbacks
+    callbacks = get_callbacks(cfg, run_dir)
+
+    # Start training
+    logging.info("Starting model training...")
+    model.fit(
+        train_dataset,
+        epochs=cfg.training.epochs,
+        steps_per_epoch=steps_per_epoch,
+        validation_data=val_dataset,
+        validation_steps=validation_steps,
+        callbacks=callbacks,
+        use_multiprocessing=cfg.training.use_multiprocessing,
+        verbose=cfg.training.verbose
+    )
+
+    logging.info("Training finished.")
+    run.finish()
 
 
 if __name__ == '__main__':
-    # loading omegaconf
-    config_path = "configs/mobilenet_heatmap.yaml"
-    os.environ["CNN2SNN_TARGET_AKIDA_VERSION"] = "v1"
+    parser = argparse.ArgumentParser(description="Train a keypoint detection model.")
+    parser.add_argument(
+        "--config",
+        type=str,
+        default="configs/heatmap_dsnt.yaml",
+        help="Path to the configuration YAML file."
+    )
+    args = parser.parse_args()
 
-    try:
-        cfg = OmegaConf.load(config_path)
-    except Exception as e:
-        print("Error loading YAML:", e)
-
-    exp_folder = str(datetime.now().strftime("%Y%m%d_%H%M%S"))
-    checkpoint_dir = str(os.path.join(cfg.root.checkpoint, exp_folder))
-    os.makedirs(checkpoint_dir, exist_ok=True)
-    logdir = str(os.path.join(checkpoint_dir, 'logs'))
-
-    # initialize wandb
-    run = wandb.init(project=cfg.wandb.project_id,
-                     dir=checkpoint_dir,
-                     name=cfg.wandb.exp_id,
-                     config=OmegaConf.to_container(cfg, resolve=True),
-                     mode=cfg.wandb.status
-                     )
-    wandb.log({'config': str(wandb.config)})
-
-    if cfg.wandb.status == 'online':
-        code = wandb.Artifact('project-source', type='code')
-        for path in glob.glob('**/*.py', recursive=True):
-            code.add_file(path)
-        for path in glob.glob('**/*.yaml', recursive=True):
-            code.add_file(path)
-        wandb.run.use_artifact(code)
-
-    # Setup WandbModelCheckpoint
-    model_name = "model_{epoch:02d}_{val_loss:.4f}.keras"
-    checkpoint_callback = ModelCheckpoint(
-        str(os.path.join(checkpoint_dir, model_name)),
-        monitor='val_loss',
-        verbose=cfg.training.verbose,
-        save_best_only=True,
-        mode='min')
-
-    # Wandb Metric Logger
-    wml = WandbMetricsLogger(log_freq='batch')
-
-    # dataset creation, saving the training files list and validation files list
-    print(os.path.join(cfg.root.data_out, 'lnes_cropped/val/keypoints.csv'))
-    train_df = pd.read_csv(os.path.join(cfg.root.data_out, 'lnes_cropped/train/keypoints.csv'))
-    train_data = {col: train_df[col].values for col in train_df.columns}
-
-    val_df = pd.read_csv(os.path.join(cfg.root.data_out, 'lnes_cropped/val/keypoints.csv'))
-    val_data = {col: val_df[col].values for col in val_df.columns}
-
-    train_dataset = create_dataset(train_data,
-                                   batch_size=cfg.training.batch_size,
-                                   input_size=cfg.data.input_size[:2],
-                                   is_training=True,
-                                   heatmap=cfg.model.heatmap,
-                                   cache_dir=None)
-
-    val_dataset = create_dataset(val_data,
-                                 batch_size=cfg.training.batch_size,
-                                 input_size=cfg.data.input_size[:2],
-                                 is_training=False,
-                                 heatmap=cfg.model.heatmap,
-                                 cache_dir=None)
-
-    initial_learning_rate = cfg.training.lr
-    decay_steps = 5e4  # Adjust based on your dataset size and epochs
-    decay_rate = 0.96  # Typical value
-    L2_WEIGHT = 0.5
-    loss_fn = functools.partial(heatmap_kl_l2_loss, lambda_l2=L2_WEIGHT)
-    # If you want to rename the loss for display during training:
-    loss_fn.__name__ = f"kl_l2_loss_lambda_{L2_WEIGHT}"
-
-    lr_schedule = tf.keras.optimizers.schedules.ExponentialDecay(
-        initial_learning_rate,
-        decay_steps=decay_steps,
-        decay_rate=decay_rate,
-        staircase=True)
-
-    # Define losses and metrics
-    losses = {"heatmap_output": loss_fn if cfg.model.heatmap else position_mse_loss}
-
-    metrics_dict = {"heatmap_output": mpkpe_from_heatmap if cfg.model.heatmap else mpkpe_regression}
-
-
-    if cfg.training.distributed:
-        mirrored_strategy = tf.distribute.MirroredStrategy()
-
-        with mirrored_strategy.scope():
-            # Initialize model.
-            model = mobilenet_heatmap_model(input_size=list(cfg.training.input_size), num_keypoints=8)
-            optimizer = tf.keras.optimizers.Adam(learning_rate=lr_schedule, clipvalue=0.5)
-            model.compile(loss=losses,
-                          optimizer=optimizer,
-                          metrics=metrics_dict
-                          )
-    else:
-        # Initialize model.
-        model = mobilenet_heatmap_model(input_size=list(cfg.training.input_size), num_keypoints=8)
-        cnn2snn.check_model_compatibility(model)
-        model.build(input_shape=(None, *list(cfg.training.input_size)))  # None is for batch size
-        optimizer = tf.keras.optimizers.Adam(learning_rate=lr_schedule, clipvalue=0.5)
-        model.compile(loss=losses,
-                      optimizer=optimizer,
-                      metrics=metrics_dict
-                      )
-
-    wandb.log({"model_summary": model.summary()})
-    print(OmegaConf.to_yaml(cfg))
-    print('Exp_ID:', exp_folder)
-
-    steps_per_epoch = len(train_data[next(iter(train_data))]) // cfg.training.batch_size  # Calculate steps per epoch
-    validation_steps = len(val_data[next(iter(val_data))]) // cfg.training.batch_size
-
-    model.fit(train_dataset,
-              epochs=cfg.training.num_epochs,
-              batch_size=cfg.training.batch_size,
-              steps_per_epoch=steps_per_epoch,
-              callbacks=[checkpoint_callback, wml],
-              validation_data=val_dataset,
-              validation_steps=validation_steps,
-              use_multiprocessing=True)
-
-    run.finish()
+    main(args.config)

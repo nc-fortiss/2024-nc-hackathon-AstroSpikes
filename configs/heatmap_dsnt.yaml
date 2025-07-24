@@ -1,0 +1,55 @@
+id: mobilenet_heatmap_dsnt
+
+# --- Path Configuration ---
+paths:
+  root_dir: "/home/arunkumar/datasets/SPADES/synthetic"
+  train_data: "${paths.root_dir}/lnes_cropped/train/keypoints.csv"
+  val_data: "${paths.root_dir}/lnes_cropped/val/keypoints.csv"
+  output_root: "/home/arunkumar/dev-python/2024-nc-hackathon-AstroSpikes/outputs"
+  checkpoint_dir: "${paths.output_root}/${id}"
+
+# --- Data & Augmentation Configuration ---
+data:
+  input_size: [ 224, 224, 3 ] # Training input size
+
+# --- Model Configuration ---
+model:
+  name: "mobilenet_heatmap_1pass" # Name of the model function to call
+  num_keypoints: 8
+  heatmap: True
+  l2_regularization_factor: 4e-5
+  environment:
+    cnn2snn_target_akida_version: "v1"
+
+# --- Training Configuration ---
+training:
+  epochs: 300
+  batch_size: 16
+  distributed: True
+  use_multiprocessing: True # For model.fit
+  verbose: 1 # Changed from 0 to 1 for better feedback
+
+  # --- Optimizer Configuration ---
+  optimizer:
+    name: "Adam"
+    learning_rate:
+      schedule: "ExponentialDecay"
+      initial_lr: 1e-4
+      decay_steps: 50000
+      decay_rate: 0.96
+      staircase: True
+    clipvalue: 0.5 # Gradient clipping
+
+# --- Checkpointing Configuration ---
+checkpointing:
+  artifact_name: "model-${id}" # Name for the model artifact in WandB
+  monitor: "val_loss"
+  mode: "min"
+
+# --- WandB Configuration ---
+wandb:
+  project: "mobilenet-astrospikes"
+  entity: neuromorphic-research
+  status: "online" # 'online', 'offline', or 'disabled'
+  log_source_code: True
+  log_freq: "batch"
