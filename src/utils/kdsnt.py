@@ -353,7 +353,7 @@ def heatmap_kl_l2_loss(y_true: tf.Tensor, y_pred: tf.Tensor, lambda_l2: float = 
 # Metrics
 # ==============================================================================
 
-def mpkpe_from_heatmap(y_true: tf.Tensor, y_pred: tf.Tensor) -> tf.Tensor:
+def mpkpe_heatmap(y_true: tf.Tensor, y_pred: tf.Tensor) -> tf.Tensor:
     """
     Computes the Mean Per Keypoint Position Error (MPJPE) metric for heatmap predictions.
 

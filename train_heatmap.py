@@ -1,4 +1,5 @@
 import argparse
+import functools
 import glob
 import logging
 import os
@@ -14,7 +15,7 @@ from wandb.integration.keras import WandbMetricsLogger, WandbModelCheckpoint
 # Import your project's modules
 from src.dataloaders.spades import create_dataset
 from src.losses.poseloss import mpkpe_regression, position_mse_loss
-from src.utils.kdsnt import mpkpe_from_heatmap, heatmap_kl_l2_loss, heatmap_kl_loss
+from src.utils.kdsnt import mpkpe_heatmap, heatmap_kl_l2_loss, heatmap_kl_loss
 from src.models.mobilenet_heatmap import mobilenet_heatmap_1pass as mobilenet_heatmap_model
 
 # It's good practice to use a logger
@@ -127,15 +128,19 @@ def get_compiler_args(cfg):
     # --- Loss Function ---
     # loss_cfg = cfg.training.loss
     if cfg.model.heatmap:
-        loss_fn = heatmap_kl_loss
-        loss_fn_name = "KLDivergence"
+        L2_WEIGHT = 0.5
+        loss_fn = functools.partial(heatmap_kl_l2_loss, lambda_l2=L2_WEIGHT)
+        # If you want to rename the loss for display during training:
+        loss_fn.__name__ = f"kl_l2_loss_lambda_{L2_WEIGHT}"
+        # loss_fn = heatmap_kl_l2_loss
+        # loss_fn_name = "KLDivergence"
         losses = {"heatmap_output": loss_fn}
     else:
         losses = {"heatmap_output": position_mse_loss}
 
     # --- Metrics ---
     if cfg.model.heatmap:
-        metrics = {"heatmap_output": mpkpe_from_heatmap}
+        metrics = {"heatmap_output": mpkpe_heatmap}
     else:
         metrics = {"heatmap_output": mpkpe_regression}
 
@@ -172,25 +177,24 @@ def build_model(cfg, strategy=None):
 
     return model
 
-
 def get_callbacks(cfg, run_dir):
-    """Creates the list of callbacks for model.fit()."""
+    """Creates the list of callbacks for model.fit(). (Local Saving Only)"""
     callbacks = [
         WandbMetricsLogger(log_freq=cfg.wandb.log_freq)
     ]
 
-    # Use WandbModelCheckpoint to save best models as artifacts
-    # This is the modern way to handle "save best N"
+    # Use WandbModelCheckpoint to save models LOCALLY ONLY.
     callbacks.append(
         WandbModelCheckpoint(
-            filepath=os.path.join(run_dir, "checkpoints", "{epoch:02d}-{val_loss:.4f}"),
+            filepath=os.path.join(run_dir, "checkpoints", "{epoch:02d}-{val_loss:.4f}.keras"),
             monitor=cfg.checkpointing.monitor,
             mode=cfg.checkpointing.mode,
             save_best_only=True,
-            save_weights_only=False  # Save the full model
+            save_weights_only=True, # Or False, depending on your need
+            save_model_as_artifact=False # Explicitly disable artifact logging
         )
     )
-    logging.info("WandbMetricsLogger and WandbModelCheckpoint callbacks configured.")
+    logging.info("W&B callbacks configured for local checkpointing only.")
     return callbacks
 
 
