@@ -197,14 +197,14 @@ def normalize_pixel_coordinates(positions, height, width, dtype=tf.float32):
     return normalized
 
 
-def denormalize_pixel_coordinates(coords: tf.Tensor, height: int, width: int) -> tf.Tensor:
+def denormalize_pixel_coordinates(coords: tf.Tensor, height: tf.Tensor, width: tf.Tensor) -> tf.Tensor:
     """
     Denormalize keypoint coordinates from the range [-1, 1] to pixel space.
     Args:
         coords: A tensor of normalized coordinates.
                 Expected shape: (..., 2) with the last dimension being (x, y).
-        height: The height of the image frame.
-        width: The width of the image frame.
+        height: The height of the image frame (as an int32 tensor from tf.shape).
+        width: The width of the image frame (as an int32 tensor from tf.shape).
 
     Returns:
         A tensor of the same shape as `coords` with coordinates in pixel space,
@@ -212,13 +212,21 @@ def denormalize_pixel_coordinates(coords: tf.Tensor, height: int, width: int) ->
     """
     dtype = coords.dtype
 
+    # Cast the integer shape tensors (from tf.shape) to the required float dtype
+    # before performing floating point arithmetic.
+    height_f = tf.cast(height, dtype=dtype)
+    width_f = tf.cast(width, dtype=dtype)
+
+    # Create the dimensions tensor for scaling.
+    # Note: tf.stack is more appropriate here than tf.constant when combining existing tensors.
+    dims = tf.stack([width_f - 1.0, height_f - 1.0])
+
     # The inverse transformation is: pixel = ((normalized + 1) / 2) * (dim - 1)
-    # This can be done efficiently with broadcasting.
     scale = tf.constant([0.5, 0.5], dtype=dtype)
 
-    # CORRECTED LINE: Create the dims tensor from Python numbers directly.
-    dims = tf.constant([width - 1.0, height - 1.0], dtype=dtype)
-
+    # Note: The original formula had a small mistake. The scaling should happen
+    # after adding 1.0 and multiplying by 0.5.
+    # pixel = (normalized_coord + 1) * 0.5 * (dimension - 1)
     return (coords + 1.0) * scale * dims
 
 
@@ -266,7 +274,7 @@ def heatmap_kl_loss(y_true: tf.Tensor, y_pred: tf.Tensor) -> tf.Tensor:
         mean=y_true,
         std=std_pixel,
         size=(height, width),
-        normalized_coordinates=False  # Assuming y_true is in pixel coordinates
+        normalized_coordinates=True
     )
 
     # --- 4. Calculate KL Divergence ---
@@ -282,8 +290,6 @@ def heatmap_kl_loss(y_true: tf.Tensor, y_pred: tf.Tensor) -> tf.Tensor:
 
     # Return the mean loss for the batch.
     return loss / tf.cast(batch_size, loss.dtype)
-
-
 
 
 @keras.saving.register_keras_serializable()
@@ -317,7 +323,7 @@ def heatmap_kl_l2_loss(y_true: tf.Tensor, y_pred: tf.Tensor, lambda_l2: float = 
 
     # --- 2. Differentiable coordinate extraction (DSNT pipeline) ---
     p_pred = spatial_softmax2d(y_pred_nchw)
-    coords_pred = spatial_expectation2d(p_pred, normalized_coordinates=False)
+    coords_pred = spatial_expectation2d(p_pred, normalized_coordinates=True)
 
     # --- 3. Calculate L2 Loss component ---
     # MSE between ground truth and predicted coordinates.
@@ -331,7 +337,7 @@ def heatmap_kl_l2_loss(y_true: tf.Tensor, y_pred: tf.Tensor, lambda_l2: float = 
         mean=y_true,
         std=std_pixel,
         size=(height, width),
-        normalized_coordinates=False
+        normalized_coordinates=True
     )
 
     # Flatten distributions for KLD calculation: (B, C, H, W) -> (B*C, H*W)
@@ -349,47 +355,88 @@ def heatmap_kl_l2_loss(y_true: tf.Tensor, y_pred: tf.Tensor, lambda_l2: float = 
     return total_loss
 
 
-# ==============================================================================
-# Metrics
-# ==============================================================================
-
-def mpkpe_heatmap(y_true: tf.Tensor, y_pred: tf.Tensor) -> tf.Tensor:
+@keras.saving.register_keras_serializable()
+def heatmap_l2_loss(y_true: tf.Tensor, y_pred: tf.Tensor, lambda_l2: float = 1.0) -> tf.Tensor:
     """
-    Computes the Mean Per Keypoint Position Error (MPJPE) metric for heatmap predictions.
+    Computes a hybrid loss combining KL-Divergence and L2 coordinate error.
 
-    This function is designed to be used as a Keras metric. It performs the following:
-    1.  Converts the predicted heatmap logits into coordinates using the DSNT pipeline
-        (spatial softmax followed by spatial expectation).
-    2.  Calculates the Euclidean distance between the predicted coordinates and the ground truth coordinates.
-    3.  Averages this distance over all keypoints and all items in the batch.
+    This loss function is designed for keypoint detection tasks and combines two components:
+    1.  **KL-Divergence Loss:** Compares the predicted heatmap distribution to a target
+        Gaussian distribution generated from the ground truth coordinates.
+    2.  **L2 Loss (MSE):** Compares the coordinates derived from the predicted heatmap
+        (via spatial expectation) directly with the ground truth coordinates.
 
     Args:
         y_true: Ground truth keypoint coordinates.
                 Expected Shape: (batch_size, num_keypoints, 2) in (x, y) pixel coordinates.
         y_pred: Predicted heatmap logits from the model.
                 Expected Shape: (batch_size, height, width, num_keypoints) (NHWC format).
+        lambda_l2: A weight factor to balance the L2 loss component.
+
+    Returns:
+        A scalar tensor representing the combined loss, averaged over the batch.
+        total_loss = kl_loss + lambda_l2 * l2_loss
+    """
+    # --- 1. Get shapes and handle data format (NHWC -> NCHW) ---
+    pred_shape = tf.shape(y_pred)
+    batch_size, height, width, num_keypoints = pred_shape[0], pred_shape[1], pred_shape[2], pred_shape[3]
+
+    # Transpose predictions from (B, H, W, C) to (B, C, H, W) to match our helpers
+    y_pred_nchw = tf.transpose(y_pred, perm=[0, 3, 1, 2])
+
+    # --- 2. Differentiable coordinate extraction (DSNT pipeline) ---
+    p_pred = spatial_softmax2d(y_pred_nchw)
+    coords_pred = spatial_expectation2d(p_pred, normalized_coordinates=True)
+
+    # --- 3. Calculate L2 Loss component ---
+    # MSE between ground truth and predicted coordinates.
+    l2_error = tf.square(y_true - coords_pred)
+    l2_loss = tf.reduce_mean(l2_error)
+
+    return l2_loss
+
+
+# ==============================================================================
+# Metrics
+# ==============================================================================
+
+@keras.saving.register_keras_serializable()
+def mpkpe_heatmap(y_true: tf.Tensor, y_pred: tf.Tensor) -> tf.Tensor:
+    """
+    Computes the Mean Per Keypoint Position Error (MPKPE) in pixel units,
+    given ground truth keypoints and predicted heatmaps.
+
+    Args:
+        y_true: Ground truth keypoint coordinates.
+                Shape: (batch_size, num_keypoints, 2) in (x, y) pixel coordinates.
+        y_pred: Predicted heatmap logits from the model.
+                Shape: (batch_size, height, width, num_keypoints) (NHWC format).
 
     Returns:
         A scalar tensor representing the mean pixel error.
     """
-    # --- 1. Get predicted coordinates from the heatmap ---
-    # Transpose predictions from (B, H, W, C) to (B, C, H, W) to match our helpers
-    y_pred_nchw = tf.transpose(y_pred, perm=[0, 3, 1, 2])
+    # Extract spatial dimensions
+    height = tf.shape(y_pred)[1]
+    width = tf.shape(y_pred)[2]
 
-    # Apply spatial softmax to get a probability distribution
+    # Transpose y_pred from NHWC to NCHW for DSNT
+    y_pred_nchw = tf.transpose(y_pred, perm=[0, 3, 1, 2])  # (B, C, H, W)
+
+    # 1. Spatial Softmax
     p_pred = spatial_softmax2d(y_pred_nchw)
 
-    # Calculate the expected value of the coordinates (in pixel space)
-    coords_pred = spatial_expectation2d(p_pred, normalized_coordinates=False)
+    # 2. Spatial Expectation (normalized coords in range [-1, 1])
+    coords_norm = spatial_expectation2d(p_pred, normalized_coordinates=True)  # (B, C, 2)
 
-    # --- 2. Calculate the Euclidean distance error ---
-    # y_true and coords_pred are both of shape (batch_size, num_keypoints, 2)
-    # tf.norm calculates the L2 norm along the last axis, which is the Euclidean distance.
-    # The result is a tensor of distances of shape (batch_size, num_keypoints).
-    distances = tf.norm(y_true - coords_pred, axis=-1)
+    # 3. Convert normalized coords to pixel coords
+    # x: [-1, 1] -> [0, width), y: [-1, 1] -> [0, height)
+    pred_coords = denormalize_pixel_coordinates(coords_norm, height * 4, width * 4)
+    gt_coords = denormalize_pixel_coordinates(y_true, height * 4, width * 4)
 
-    # --- 3. Compute the mean error ---
-    # Take the mean over all keypoints and all batch items to get a single scalar value.
+    # 4. Compute per-keypoint Euclidean distance
+    distances = tf.norm(gt_coords - pred_coords, axis=-1)  # Shape: (batch_size, num_keypoints)
+
+    # 5. Mean over all keypoints and all batches
     mean_error = tf.reduce_mean(distances)
 
     return mean_error

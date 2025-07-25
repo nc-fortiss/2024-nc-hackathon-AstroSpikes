@@ -5,21 +5,30 @@ import logging
 import os
 from datetime import datetime
 from pathlib import Path
-
+import keras
 import pandas as pd
 import tensorflow as tf
 import wandb
 from omegaconf import OmegaConf
-from wandb.integration.keras import WandbMetricsLogger, WandbModelCheckpoint
+from wandb.integration.keras import WandbMetricsLogger
 
 # Import your project's modules
 from src.dataloaders.spades import create_dataset
 from src.losses.poseloss import mpkpe_regression, position_mse_loss
-from src.utils.kdsnt import mpkpe_heatmap, heatmap_kl_l2_loss, heatmap_kl_loss
+from src.utils.kdsnt import mpkpe_heatmap, heatmap_kl_l2_loss, heatmap_kl_loss, heatmap_l2_loss
 from src.models.mobilenet_heatmap import mobilenet_heatmap_1pass as mobilenet_heatmap_model
+# from src.models.mobilenet import mobilenet_heatmap_akida as mobilenet_heatmap_model
 
 # It's good practice to use a logger
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+
+def set_seed(seed):
+    import random
+    import numpy as np
+    tf.random.set_seed(seed)
+    np.random.seed(seed)
+    random.seed(seed)
 
 
 def setup_environment(cfg):
@@ -41,7 +50,7 @@ def initialize_wandb(cfg, run_dir, config_path):
         project=cfg.wandb.project,
         entity=cfg.wandb.entity,
         dir=run_dir,
-        name=f"{cfg.id}-{datetime.now().strftime('%H%M%S')}",
+        # name=f"{cfg.id}-{datetime.now().strftime('%H%M%S')}",
         config=OmegaConf.to_container(cfg, resolve=True),
         mode=cfg.wandb.status
     )
@@ -107,32 +116,32 @@ def get_datasets(cfg):
 def get_compiler_args(cfg):
     """Constructs loss, optimizer, and metrics from config."""
     # --- Learning Rate Schedule ---
-    lr_cfg = cfg.training.optimizer.learning_rate
-    if lr_cfg.schedule == "ExponentialDecay":
-        lr_schedule = tf.keras.optimizers.schedules.ExponentialDecay(
-            lr_cfg.initial_lr,
-            decay_steps=lr_cfg.decay_steps,
-            decay_rate=lr_cfg.decay_rate,
-            staircase=lr_cfg.staircase
-        )
-    else:
-        raise ValueError(f"Unsupported learning rate schedule: {lr_cfg.schedule}")
+    # lr_cfg = cfg.training.optimizer.learning_rate
+    # if lr_cfg.schedule == "ExponentialDecay":
+    #     lr_schedule = tf.keras.optimizers.schedules.ExponentialDecay(
+    #         lr_cfg.initial_lr,
+    #         decay_steps=lr_cfg.decay_steps,
+    #         decay_rate=lr_cfg.decay_rate,
+    #         staircase=lr_cfg.staircase
+    #     )
+    # else:
+    #     raise ValueError(f"Unsupported learning rate schedule: {lr_cfg.schedule}")
 
     # --- Optimizer ---
     opt_cfg = cfg.training.optimizer
     if opt_cfg.name == "Adam":
-        optimizer = tf.keras.optimizers.Adam(learning_rate=lr_schedule, clipvalue=opt_cfg.clipvalue)
+        optimizer = tf.keras.optimizers.Adam(learning_rate=opt_cfg.learning_rate.initial_lr)
     else:
         raise ValueError(f"Unsupported optimizer: {opt_cfg.name}")
 
     # --- Loss Function ---
     # loss_cfg = cfg.training.loss
     if cfg.model.heatmap:
-        L2_WEIGHT = 0.5
-        loss_fn = functools.partial(heatmap_kl_l2_loss, lambda_l2=L2_WEIGHT)
-        # If you want to rename the loss for display during training:
-        loss_fn.__name__ = f"kl_l2_loss_lambda_{L2_WEIGHT}"
-        # loss_fn = heatmap_kl_l2_loss
+        # L2_WEIGHT = 0.5
+        # loss_fn = functools.partial(heatmap_kl_l2_loss, lambda_l2=L2_WEIGHT)
+        # loss_fn.__name__ = f"kl_l2_loss_lambda_{L2_WEIGHT}"
+        loss_fn = heatmap_l2_loss
+        loss_fn.__name__ = f"heatmap_l2_loss"
         # loss_fn_name = "KLDivergence"
         losses = {"heatmap_output": loss_fn}
     else:
@@ -155,7 +164,6 @@ def build_model(cfg, strategy=None):
         model = mobilenet_heatmap_model(
             input_size=list(cfg.data.input_size),
             num_keypoints=cfg.model.num_keypoints,
-            l2_factor=cfg.model.l2_regularization_factor
         )
         model.compile(**compiler_args)
         return model
@@ -177,24 +185,24 @@ def build_model(cfg, strategy=None):
 
     return model
 
+
 def get_callbacks(cfg, run_dir):
     """Creates the list of callbacks for model.fit(). (Local Saving Only)"""
-    callbacks = [
-        WandbMetricsLogger(log_freq=cfg.wandb.log_freq)
-    ]
 
-    # Use WandbModelCheckpoint to save models LOCALLY ONLY.
-    callbacks.append(
-        WandbModelCheckpoint(
-            filepath=os.path.join(run_dir, "checkpoints", "{epoch:02d}-{val_loss:.4f}.keras"),
+    callbacks = [
+        # Logs metrics to W&B, does not save models
+        WandbMetricsLogger(log_freq=cfg.wandb.log_freq),
+
+        # Saves best model locally based on validation loss
+        keras.callbacks.ModelCheckpoint(
+            filepath=os.path.join(run_dir, 'checkpoints/{epoch:02d}-{val_loss:.4f}.keras'),
             monitor=cfg.checkpointing.monitor,
             mode=cfg.checkpointing.mode,
-            save_best_only=True,
-            save_weights_only=True, # Or False, depending on your need
-            save_model_as_artifact=False # Explicitly disable artifact logging
-        )
-    )
-    logging.info("W&B callbacks configured for local checkpointing only.")
+            save_best_only=True
+        ),
+    ]
+
+    logging.info("Configured for local checkpointing only. W&B model checkpointing disabled.")
     return callbacks
 
 
@@ -203,12 +211,12 @@ def main(config_path):
     # Load configuration
     cfg = OmegaConf.load(config_path)
     print(OmegaConf.to_yaml(cfg))
-
+    set_seed(cfg.training.seed)
     # Setup environment and directories
     run_dir = setup_environment(cfg)
 
     # Initialize WandB
-    run = initialize_wandb(cfg, run_dir, config_path=args.config)
+    run = initialize_wandb(cfg, run_dir, config_path=config_path)
 
     # Load data
     train_dataset, val_dataset, train_size, val_size = get_datasets(cfg)
@@ -216,11 +224,20 @@ def main(config_path):
     steps_per_epoch = train_size // cfg.training.batch_size
     validation_steps = val_size // cfg.training.batch_size
 
-    # Setup distributed training strategy if enabled
-    strategy = tf.distribute.MirroredStrategy() if cfg.training.distributed else None
+    # --- START OF CORRECTION ---
 
-    # Build and compile model
-    model = build_model(cfg, strategy)
+    # 1. Setup distributed training strategy if enabled
+    if cfg.training.distributed:
+        strategy = tf.distribute.MirroredStrategy()
+        logging.info(f"Using MirroredStrategy with {strategy.num_replicas_in_sync} devices.")
+    else:
+
+        strategy = tf.distribute.get_strategy()
+
+    with strategy.scope():
+        model = build_model(cfg)
+
+    # --- END OF CORRECTION ---
 
     # Get callbacks
     callbacks = get_callbacks(cfg, run_dir)

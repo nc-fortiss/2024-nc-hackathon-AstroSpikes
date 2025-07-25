@@ -17,3 +17,5 @@ extras/*
 logs/*
 /tmp/
 tmp/*
+outputs/**
+outputs

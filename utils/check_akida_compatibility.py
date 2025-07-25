@@ -7,6 +7,7 @@ import cnn2snn
 import sys
 
 from src.models.mobilenet_heatmap import mobilenet_heatmap_7pass, mobilenet_heatmap_1pass
+from src.models.mobilenet import mobilenet_heatmap_akida
 import keras
 
 os.environ["CNN2SNN_TARGET_AKIDA_VERSION"] = "v1"
@@ -17,11 +18,13 @@ print('     Akida version: ', cnn2snn.get_akida_version())
 
 tf.config.run_functions_eagerly(False)
 
-virtual_device = ak.AKD1500()
+virtual_device = ak.AKD1000()
 logging.basicConfig(stream=sys.stderr, level=logging.INFO)
 
 # Loading from a model class:
-model = mobilenet_heatmap_1pass(input_size=(224, 224, 3), num_keypoints=8)
+# model = mobilenet_heatmap_1pass(input_size=(224, 224, 3), num_keypoints=8)
+# model.build(input_shape=(None, *(224, 224, 3)))  # None is for batch size
+model = mobilenet_heatmap_akida(input_size=(224, 224, 3), num_keypoints=8)
 model.build(input_shape=(None, *(224, 224, 3)))  # None is for batch size
 
 # Loading from a .keras trained model:

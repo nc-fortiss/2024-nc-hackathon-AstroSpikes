@@ -80,6 +80,7 @@ def convert_relative_kpts_to_absolute(input_csv, output_csv):
     # Create final DataFrame and save
     df_out = df[final_columns]
     df_out.to_csv(output_csv, index=False)
+    # {"filename": "img000001.jpg",    "keypoints": [],    "confidences": []}
 
 
 import pandas as pd
