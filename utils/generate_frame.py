@@ -12,17 +12,19 @@ from src.utils.transformations import Transformations
 
 
 class SamplesDataLoader(tonic.Dataset):
-    def __init__(self, dataset_dir, dataset_type="synthetic", transform=None):
+    def __init__(self, dataset_dir, dataset_type="synthetic", transform=None, transform_name=None):
         """
         Args:
             dataset_dir (str): Root directory containing the synthetic or Real dataset folders.
             dataset_type (str): Type of dataset to load ("Synthetic" or "Real").
             transform (callable, optional): Optional transform to apply to the events.
+            transform_name (str, optional): Name of the transformation to apply.
         """
         self.dataset_dir = dataset_dir
         self.dataset_type = dataset_type
         self.samples = self._load_samples()
         self.transform = transform
+        self.transform_name = transform_name
        # self.filter = filter
 
     def _load_samples(self):
@@ -147,7 +149,11 @@ class SamplesDataLoader(tonic.Dataset):
 
         # rgb_frames = self.generate_rgb_from_samples(events)
         for i, frame in enumerate(event_frames):
-            im = Image.fromarray(frame.transpose(1, 0, 2))
+            # For lnes:
+            if self.transform_name == "lnes":
+                im = Image.fromarray(frame.transpose(1, 0, 2))  # Transpose to (H, W, C)
+            else:
+                im = Image.fromarray(frame)
             number = f"{i:03}"
             im.save(f"{file_path}img{number}_{traj_name}.png")
             im.save(f"{file_path}img{number}_{traj_name}.png")
@@ -208,7 +214,7 @@ if __name__ == "__main__":
   #  print(f"Filter: {cfg.filter.method}")
     print(f"Dataset type: {d_type}\n")
 
-    data_loader = SamplesDataLoader(dataset_dir=dataset_dir, dataset_type=d_type, transform=t)
+    data_loader = SamplesDataLoader(dataset_dir=dataset_dir, dataset_type=d_type, transform=t, transform_name = cfg.data.transformation)
     print(f"Successfully initialized data loader.")
 
     # Generate RGB frames from samples and save them

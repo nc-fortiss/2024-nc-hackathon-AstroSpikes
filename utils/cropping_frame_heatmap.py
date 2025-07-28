@@ -218,7 +218,7 @@ def main(config_path: str | Path,
 if __name__ == "__main__":
     # It's good practice to use a CLI argument parser like argparse,
     # but for this script, hardcoded values are clear.
-    config_path = "configs/mobilenet.yaml"
+    config_path = "configs/mobilenet_heatmap.yaml"
     splits: Sequence[str] = ("train", "val", "test")
     limit_train: Optional[int] = 1000  # Example: Set a limit for faster testing
     limit_val: Optional[int] = 1000

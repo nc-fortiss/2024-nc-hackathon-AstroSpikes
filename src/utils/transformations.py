@@ -66,7 +66,6 @@ class Transformations:
     def two_polarity_time_surface(self, events):  # working
         transform = transforms.Compose([
             transforms.MergePolarities(),
-            transforms.CenterCrop(sensor_size=(1280, 720, 1), size=(720, 720)),
             transforms.Downsample(spatial_factor=(self.img_size[0]/1280,self.img_size[1]/720)),
             transforms.ToTimesurface(dt=1000, tau=200, sensor_size=(self.img_size[0], self.img_size[1], 1))
         ])
