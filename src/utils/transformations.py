@@ -7,6 +7,7 @@ class Transformations:
     def __init__(self, cfg: DictConfig):
         self.config = cfg
         self.img_size = cfg.data.input_size
+        self.n_time_bins = 600
 
     def event_frame(self, events):
         """ Takes pandas dataframe ev_data [x,y,p,t] and generates event-frame by
@@ -28,9 +29,13 @@ class Transformations:
         return ev_frame
 
     def three_c_representation(self, events):  # working
+        first_timestamp = events[0][0]
+        last_timestamp = events[-1][0]
+        dt = (last_timestamp - first_timestamp) / self.n_time_bins / 3
+        
         transform = transforms.Compose([
             transforms.MergePolarities(),
-            transforms.ToTimesurface(sensor_size=(self.img_size[0], self.img_size[1], 1), dt=333, tau=200)
+            transforms.ToTimesurface(sensor_size=(self.img_size[0], self.img_size[1], 1), dt=dt, tau=200)
         ])
         transformed_events = transform(events)
         # create frames from the transformed events
@@ -64,10 +69,14 @@ class Transformations:
         return ret
 
     def two_polarity_time_surface(self, events):  # working
+
+        first_timestamp = events[0][0]
+        last_timestamp = events[-1][0]
+        dt = (last_timestamp - first_timestamp) / self.n_time_bins
         transform = transforms.Compose([
             transforms.MergePolarities(),
             transforms.Downsample(spatial_factor=(self.img_size[0]/1280,self.img_size[1]/720)),
-            transforms.ToTimesurface(dt=1000, tau=200, sensor_size=(self.img_size[0], self.img_size[1], 1))
+            transforms.ToTimesurface(dt=dt, tau=200, sensor_size=(self.img_size[0], self.img_size[1], 1))
         ])
 
         events_positive = events[events['p'] == 1]
@@ -103,7 +112,7 @@ class Transformations:
             ret.append(rgb_frame)
         return ret
 
-    def lnes(self, events, intervalLength=1000):
+    def lnes(self, events):
 
         # Transform and sort events by timestamp
         t_events = events[events['t'].argsort()]  # Sort events by time
@@ -111,14 +120,14 @@ class Transformations:
         # Initialize parameters
         t_start = t_events[0]['t']  # Global start time
         t_end = t_events[-1]['t']  # Global end time
-        n_time_bins = int((t_end - t_start) // intervalLength) + 1
+        intervalLength = (t_end - t_start) / self.n_time_bins
 
         # Pre-allocate output array (n_time_bins, 240, 240, 3)
-        ret = np.zeros((n_time_bins, self.img_size[0], self.img_size[1], self.img_size[2]), dtype=np.float32)
+        ret = np.zeros((self.n_time_bins, self.img_size[0], self.img_size[1], self.img_size[2]), dtype=np.float32)
 
         # Assign events to time bins
         bin_indices = ((t_events['t'] - t_start) // intervalLength).astype(np.int32)
-        bin_indices = np.clip(bin_indices, 0, n_time_bins - 1)  # Ensure bounds
+        bin_indices = np.clip(bin_indices, 0, self.n_time_bins - 1)  # Ensure bounds
 
         # Extract event properties and ensure integer types
         x = t_events['x'].astype(np.int32)
