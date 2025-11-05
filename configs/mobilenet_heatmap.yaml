@@ -1,15 +1,11 @@
 id: fortiss_mobilenet_two_d_histogram_syn
 root:
-  labels: '/home/arunkumar/datasets/SPADES/synthetic'
-  data_out: "/home/arunkumar/datasets/SPADES/synthetic"
-  checkpoint: "/home/arunkumar/dev-python/2024-nc-hackathon-AstroSpikes/outputs/${id}"
+  labels: '/Volumes/T7/synthetic'
+  dataset: "/Volumes/T7/synthetic"
+  data_out: "/Volumes/T7/SPADES_frames"
+  checkpoint: "/home/arunkumar/experiments/SPADES/${id}"
   test_data: "/home/arunkumar/datasets/SPADES/synthetic/val.csv"
-  labels_dir: "/home/arunkumar/datasets/SPADES/synthetic"
-
-dataset:
-  root_dir: "/home/arunkumar/datasets/SPADES/synthetic"
-  train_data_path: ${dataset.root_dir}/lnes_cropped/train/keypoints.csv
-  val_data_path: ${dataset.root_dir}/lnes_cropped/train/keypoints.csv
+  labels_dir: "/Volumes/T7/synthetic"
 
 filter:
   method: "get_distribution"
@@ -43,5 +39,5 @@ model:
 
 wandb:
   project_id: mobilenet-astrospikes
-  status: 'online'
+  status: 'offline'
   exp_id: 'heatmap_dsnt'

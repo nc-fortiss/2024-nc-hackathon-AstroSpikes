@@ -17,5 +17,7 @@ extras/*
 logs/*
 /tmp/
 tmp/*
-outputs/**
-outputs
+outputs/*
+.vscode/*
+visualizations/*
+results/*
