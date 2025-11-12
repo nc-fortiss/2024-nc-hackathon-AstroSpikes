@@ -21,3 +21,7 @@ outputs/*
 .vscode/*
 visualizations/*
 results/*
+30_07_25/*
+notebooks/speedscore_plots/*
+v1_results/*
+notebooks/speedscore_plots.zip
