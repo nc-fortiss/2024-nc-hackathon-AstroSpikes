@@ -69,6 +69,7 @@ class SamplesDataLoader(tonic.Dataset):
         elif self.dataset_type == "Real":
             samples = [(str(event_file), None) for event_file in csv_files]
 
+        samples.sort(key=lambda x: x[0])
         print(f"Loaded {len(samples)} samples")
         return samples
 
@@ -370,7 +371,7 @@ if __name__ == "__main__":
     start_time = time.time()
     
     # Define which trajectories to process (can be modified as needed)
-    trajs_to_process = [200]
+    trajs_to_process = [164, 78, 254, 298, 134, 2, 172, 285, 280, 144, 227, 111, 137, 147]
     # Filter indices to only process specified trajectories
     indices_to_process = [idx for idx in range(len(data_loader.samples)) if idx in trajs_to_process]
     
